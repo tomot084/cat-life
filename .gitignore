@@ -1,0 +1,24 @@
+node_modules/
+dist/
+.env*
+input/
+data/
+artifacts/
+test-results/
+*.blend
+*.blend1
+__pycache__/
+*.pyc
+
+# Private local credentials and authoring files
+*.npz
+*.zip
+*.pem
+*.key
+*.p12
+*.pfx
+.npmrc
+.yarnrc.yml
+.ssh/
+credentials*
+token*
