@@ -1,8 +1,10 @@
-import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, DirectionalLight, ShadowGenerator, Color3, Color4, ImportMeshAsync, TransformNode, PointerEventTypes, DynamicTexture, StandardMaterial, MeshBuilder } from '@babylonjs/core';
+import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, DirectionalLight, ShadowGenerator, Color3, Color4, ImportMeshAsync, TransformNode, DynamicTexture, StandardMaterial, MeshBuilder } from '@babylonjs/core';
 import '@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent';
 import '@babylonjs/loaders/glTF/index.js';
 import { createRoom } from './room';
-import { createInteractions, type Companion } from './interactions';
+import { createInteractions, type Companion, type InteractionKind } from './interactions';
+import { attachRoomControls } from './controls';
+import { safeFloorPoint } from './placement';
 import purinUrl from './assets/models/purin.glb?url';
 import kokoroUrl from './assets/models/kokoro.glb?url';
 import './production.css';
@@ -17,7 +19,7 @@ import './production.css';
   const camera = new ArcRotateCamera('room-camera', 1.20, 1.12, canvas.clientWidth < 600 ? 13.4 : 9.6, new Vector3(0, .85, 0), scene);
   camera.lowerRadiusLimit = 4; camera.upperRadiusLimit = 16;
   camera.upperBetaLimit = 1.5; camera.lowerBetaLimit = .25;
-  camera.wheelDeltaPercentage = .015; camera.attachControl(canvas, true); camera.storeState();
+  camera.storeState();
   const fill = new HemisphericLight('fill', new Vector3(0, 1, 0), scene);
   fill.intensity = .95; fill.groundColor = new Color3(.56, .50, .42);
   const sun = new DirectionalLight('sun', new Vector3(-.5, -1, .7), scene);
@@ -42,11 +44,12 @@ import './production.css';
       shadows.addShadowCaster(mesh); mesh.receiveShadows = true;
     }
     const scale = (index ? 1.65 * 1.08 : 1.65) / (hi.y - lo.y);
-    root.scaling.setAll(scale); root.position.set(index ? 1.15 : -1.15, .025 - lo.y * scale, .5);
-    cats.push({ key, name, root, meshes: result.meshes, groups: result.animationGroups,
-      baseX: root.position.x, baseY: root.position.y, baseZ: .5, action: '', angle: index ? Math.PI : 0 });
+    const x = index ? 1.15 : -1.15, z = .5;
+    root.scaling.setAll(scale); root.position.set(x, .025 - lo.y * scale, z);
+    cats.push({ key, name, root, meshes: result.meshes, nodes: result.transformNodes, groups: result.animationGroups,
+      homeX: x, homeZ: z, baseX: x, baseY: root.position.y, baseZ: z, walkX: x, walkZ: z,
+      action: '', angle: index ? Math.PI : 0 });
   }
-  // A small soft contact shadow keeps the paws visually grounded at every camera angle.
   const contactTexture = new DynamicTexture('contact-shadow', 64, scene, false);
   const contactContext = contactTexture.getContext() as CanvasRenderingContext2D;
   const gradient = contactContext.createRadialGradient(32, 32, 3, 32, 32, 31);
@@ -64,9 +67,19 @@ import './production.css';
       contact.rotation.y = cat.root.rotation.y;
     });
   });
-  let mode = 'relax', paused = false, selected = 0;
+  const selectionMat = new StandardMaterial('selection ring', scene);
+  selectionMat.diffuseColor = Color3.FromHexString('#e9bd80');
+  selectionMat.emissiveColor = Color3.FromHexString('#c0925b'); selectionMat.alpha = .7;
+  const selection = MeshBuilder.CreateTorus('selected-cat-ring', { diameter: .92, thickness: .027, tessellation: 40 }, scene);
+  selection.material = selectionMat; selection.isPickable = false;
+  let mode = 'relax', paused = false, selected = 0, grabbed = -1;
   const status = document.querySelector<HTMLOutputElement>('#interaction-status')!;
-  const interactions = createInteractions(scene, cats, text => { status.textContent = text; });
+  const profile = document.querySelector<HTMLElement>('#cat-profile')!;
+  const setBase = (index: number, x: number, z: number) => {
+    const cat = cats[index]; cat.baseX = x; cat.baseZ = z;
+    cat.walkX = x - .42 * Math.sin(cat.angle); cat.walkZ = z - .42 * Math.cos(cat.angle);
+  };
+  const interactions = createInteractions(scene, cats, camera, text => { status.textContent = text; }, setBase);
   const play = (cat: Companion, action: string) => {
     for (const group of cat.groups) group.stop();
     cat.groups.find(g => g.name === action)!.start(true); cat.action = action;
@@ -76,46 +89,100 @@ import './production.css';
     document.querySelectorAll<HTMLButtonElement>('[data-cat]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.cat) === selected)));
     document.querySelector('#pause')!.textContent = paused ? '再生' : '一時停止';
     document.querySelectorAll<HTMLButtonElement>('[data-interaction]').forEach(b => { b.disabled = paused; });
+    profile.textContent = selected ? 'こころ · 黒灰白' : 'ぷーたん · 茶白';
+  }
+  function select(index: number) {
+    selected = index; update();
+    status.textContent = `${cats[index].name}を選びました。`;
   }
   const setMode = (next: string) => {
     interactions.cancel(paused); mode = next; paused = false;
     cats.forEach((cat, i) => {
-      cat.root.position.set(cat.baseX, cat.baseY, cat.baseZ); cat.root.rotation.y = i ? -.18 : .18;
       cat.angle = i ? Math.PI : 0;
+      cat.walkX = cat.baseX - .42 * Math.sin(cat.angle);
+      cat.walkZ = cat.baseZ - .42 * Math.cos(cat.angle);
+      cat.root.position.set(cat.baseX, cat.baseY, cat.baseZ);
+      cat.root.rotation.y = next === 'walk' ? Math.atan2(Math.cos(cat.angle), -Math.sin(cat.angle)) : i ? -.18 : .18;
       play(cat, next === 'walk' ? 'WalkCycle' : next === 'sit' ? 'IdleSit' : i ? 'IdleSit' : 'IdleNorm');
     });
     status.textContent = 'ふたりの、いつものひととき。'; update();
   };
   document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(b => { b.onclick = () => setMode(b.dataset.mode!); });
-  document.querySelectorAll<HTMLButtonElement>('[data-cat]').forEach(b => { b.onclick = () => { selected = Number(b.dataset.cat); update(); }; });
+  document.querySelectorAll<HTMLButtonElement>('[data-cat]').forEach(b => { b.onclick = () => select(Number(b.dataset.cat)); });
   document.querySelectorAll<HTMLButtonElement>('[data-interaction]').forEach(b => {
-    b.onclick = () => interactions.start(selected, b.dataset.interaction as 'treat' | 'pet', paused);
+    b.onclick = () => { interactions.start(selected, b.dataset.interaction as InteractionKind, paused); document.querySelector<HTMLDetailsElement>('#more-actions')!.open = false; };
   });
-  // POINTERTAP excludes a drag, so orbiting the camera never accidentally pets a cat.
-  scene.onPointerObservable.add(event => {
-    if (event.type !== PointerEventTypes.POINTERTAP) return;
-    const index = cats.findIndex(cat => cat.meshes.includes(event.pickInfo?.pickedMesh!));
-    if (index < 0) return;
-    selected = index; update(); interactions.start(index, 'pet', paused);
+  document.querySelectorAll<HTMLButtonElement>('[data-extra]').forEach(b => {
+    b.onclick = () => {
+      const extra = b.dataset.extra;
+      if (extra === 'focus') {
+        camera.setTarget(cats[selected].root.position.add(new Vector3(0, .8, 0)));
+        camera.radius = 5.6; status.textContent = `${cats[selected].name}の近くへ。`;
+      } else if (extra === 'reset-all') {
+        cats.forEach((cat, index) => setBase(index, cat.homeX, cat.homeZ));
+        setMode('relax'); camera.restoreState(); status.textContent = 'ふたりも視点も、元の場所へ。';
+      } else if (extra === 'hide') {
+        document.body.classList.add('ui-hidden');
+        document.querySelector<HTMLButtonElement>('#show-ui')!.hidden = false;
+      }
+      document.querySelector<HTMLDetailsElement>('#more-actions')!.open = false;
+    };
   });
+  document.querySelector<HTMLButtonElement>('#show-ui')!.onclick = () => {
+    document.body.classList.remove('ui-hidden');
+    document.querySelector<HTMLButtonElement>('#show-ui')!.hidden = true;
+  };
   document.querySelector('#pause')!.addEventListener('click', () => {
     paused = !paused; interactions.pause(paused);
     status.textContent = paused ? 'ひとやすみ中。再生すると、またふれあえます。' : 'ふたりの時間が、また動きはじめました。'; update();
   });
   document.querySelector('#reset')!.addEventListener('click', () => camera.restoreState());
+  let grabState: { index: number; group: Companion['groups'][number]; frame: number } | undefined;
+  attachRoomControls(canvas, scene, camera, cats, {
+    select,
+    grab(index) {
+      interactions.cancel(paused);
+      const cat = cats[index], group = cat.groups.find(g => g.name === cat.action)!;
+      grabState = { index, group, frame: group.getCurrentFrame() };
+      for (const g of cat.groups) g.stop();
+      const idle = cat.groups.find(g => g.name === (cat.action === 'IdleSit' ? 'IdleSit' : 'IdleNorm'))!;
+      idle.start(true); idle.goToFrame(idle.from); idle.pause();
+      grabbed = index; cat.root.position.y = cat.baseY + .035;
+      status.textContent = `${cat.name}をつかみました。床の好きな場所へ。`;
+    },
+    move(index, x, z) {
+      const other = cats[1 - index].root.position;
+      const point = safeFloorPoint(x, z, { x: other.x, z: other.z });
+      cats[index].root.position.set(point.x, cats[index].baseY + .035, point.z);
+    },
+    drop(index) {
+      if (grabbed !== index || !grabState) return;
+      const cat = cats[index]; cat.root.position.y = cat.baseY;
+      setBase(index, cat.root.position.x, cat.root.position.z);
+      for (const g of cat.groups) g.stop();
+      grabState.group.start(true); grabState.group.goToFrame(grabState.frame);
+      if (paused) grabState.group.pause();
+      grabbed = -1; grabState = undefined;
+      status.textContent = `${cat.name}をここに置きました。`;
+    },
+  });
   setMode('relax'); await scene.whenReadyAsync();
   document.querySelector('#loading')!.remove();
-  document.querySelectorAll<HTMLButtonElement>('button').forEach(b => { b.disabled = false; });
+  document.querySelectorAll<HTMLButtonElement>('button').forEach(b => { if (b.id !== 'show-ui') b.disabled = false; });
   engine.runRenderLoop(() => {
-    const dt = Math.min(engine.getDeltaTime() / 1000, .05);
-    if (mode === 'walk' && !paused) cats.forEach(cat => {
-      if (interactions.isActive(cat)) return;
+    const elapsed = engine.getDeltaTime() / 1000;
+    const dt = Math.min(elapsed, .05);
+    if (mode === 'walk' && !paused) cats.forEach((cat, index) => {
+      if (grabbed === index || interactions.isActive(cat)) return;
       cat.angle += dt * .45;
-      cat.root.position.x = cat.baseX + .42 * Math.sin(cat.angle);
-      cat.root.position.z = cat.baseZ + .42 * Math.cos(cat.angle);
+      cat.root.position.x = cat.walkX + .42 * Math.sin(cat.angle);
+      cat.root.position.z = cat.walkZ + .42 * Math.cos(cat.angle);
       cat.root.rotation.y = Math.atan2(Math.cos(cat.angle), -Math.sin(cat.angle));
     });
-    interactions.tick(dt, paused); scene.render();
+    interactions.tick(Math.min(elapsed, .25), paused);
+    selection.position.set(cats[selected].root.position.x, .05, cats[selected].root.position.z);
+    selection.visibility = grabbed === selected ? 1 : .6;
+    scene.render();
   });
   addEventListener('resize', () => engine.resize()); canvas.dataset.ready = 'true';
 })().catch(error => {

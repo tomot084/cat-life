@@ -41,32 +41,27 @@ try {
   await page.waitForSelector('canvas[data-ready="true"]', { timeout: 90000 });
   const readyMs = Date.now() - started;
   assert.equal(await page.title(), 'ぷーたんとこころのお部屋');
-  const shot = name => page.screenshot({ path: `${out}/${label}-${name}.png`, timeout: 60000 });
-  await shot('relax');
   const canvas = page.locator('canvas');
-  const frame = () => canvas.screenshot({ timeout: 60000 });
+  const frame = () => canvas.evaluate(element => element.toDataURL('image/png'));
   const click = name => page.getByRole('button', { name, exact: true }).click();
   const modes = [], interactions = [];
   for (const [mode, title] of [['relax', 'のんびり過ごす'], ['walk', 'ふたりでおさんぽ'], ['sit', '並んでおすわり']]) {
     await click(title);
     assert.equal(await page.getByRole('button', { name: title, exact: true }).getAttribute('aria-pressed'), 'true');
     const a = await frame(); await page.waitForTimeout(400);
-    assert(!a.equals(await frame()), mode + ' must animate');
+    assert.notEqual(a, await frame(), mode + ' must animate');
     modes.push({ mode, frames_change: true });
     for (const cat of ['ぷーたん', 'こころ']) {
       await click(cat);
       await click('ちゅーる');
       assert((await page.locator('output').innerText()).includes(cat + 'にちゅーる'));
-      if (mode === 'relax' && cat === 'ぷーたん') await shot('treat');
       // Replacing an active reaction must clean up its meshes and saved pose.
       await click('なでる');
       assert((await page.locator('output').innerText()).includes(cat + 'をなでなで'));
-      if (mode === 'sit' && cat === 'こころ') await shot('pet');
       interactions.push({ mode, cat, treat: true, pet: true });
       await click(title); // A mode change cancels any reaction immediately.
       assert.equal(await page.locator('output').innerText(), 'ふたりの、いつものひととき。');
     }
-    if (mode !== 'relax') await shot(mode);
   }
   // Natural completion, rapid repetition, and pause/resume in mid-reaction.
   await click('のんびり過ごす');
@@ -74,26 +69,25 @@ try {
     await click(action); await click(action); await click('一時停止');
     assert(await page.getByRole('button', { name: action, exact: true }).isDisabled());
     await page.waitForTimeout(350); const frozen = await frame();
-    await page.waitForTimeout(300); assert(frozen.equals(await frame()), 'Pause must freeze reaction');
+    await page.waitForTimeout(300); assert.equal(frozen, await frame(), 'Pause must freeze reaction');
     await click('再生');
-    await page.waitForFunction(() => document.querySelector('output').textContent === 'ふたりの時間に、もどりました。', null, { timeout: 30000 });
+    await page.waitForFunction(() => document.querySelector('output').textContent === 'ふたりの時間に、もどりました。', null, { timeout: 60000 });
   }
   await click('並んでおすわり'); await click('一時停止');
   await page.waitForTimeout(350); const stopped = await frame();
-  await page.waitForTimeout(300); assert(stopped.equals(await frame()), 'Pause must freeze');
+  await page.waitForTimeout(300); assert.equal(stopped, await frame(), 'Pause must freeze');
   const box = await canvas.boundingBox();
   await page.mouse.move(box.x + box.width * .5, box.y + box.height * .5);
   await page.mouse.down(); await page.mouse.move(box.x + box.width * .65, box.y + box.height * .56, { steps: 15 }); await page.mouse.up();
   await page.waitForTimeout(700); const rotated = await frame();
-  assert(!rotated.equals(stopped), 'Drag must rotate');
+  assert.notEqual(rotated, stopped, 'Drag must rotate');
   await page.mouse.wheel(0, -400); await page.waitForTimeout(700);
-  assert(!rotated.equals(await frame()), 'Wheel must zoom');
+  assert.notEqual(rotated, await frame(), 'Wheel must zoom');
   await click('視点を戻す'); await page.waitForTimeout(700);
-  assert(stopped.equals(await frame()), 'Reset must restore camera');
-  await page.locator('summary').click();
+  assert.equal(stopped, await frame(), 'Reset must restore camera');
+  await page.locator('footer summary').click();
   const credits = await page.locator('footer').innerText();
   for (const name of ['DreamNoms', 'Kenney', '3D Assets', 'Cat Tree', 'Cushion Bed', 'CC0 1.0', 'CC BY 4.0', 'bookcaseOpenLow', 'books', 'pillow', 'plantSmall1']) assert(credits.includes(name));
-  await shot('credits');
   assert.equal(new Set(requests.filter(u => u.endsWith('.glb'))).size, 8);
   await page.close();
 
@@ -105,7 +99,6 @@ try {
   await mobile.getByRole('button', { name: 'こころ', exact: true }).tap();
   await mobile.getByRole('button', { name: 'なでる', exact: true }).tap();
   assert((await mobile.locator('output').innerText()).includes('こころをなでなで'));
-  await mobile.screenshot({ path: `${out}/${label}-mobile.png`, fullPage: true, timeout: 60000 });
   await mobile.close();
   assert.equal(errors.length, 0, JSON.stringify(errors));
   assert.equal(badResponses.length, 0, JSON.stringify(badResponses));

@@ -8,3 +8,29 @@ main{max-width:1600px;margin:auto}.room-view{position:relative;background:#f0ece
 footer{padding:12px 4vw 20px;font-size:11px;line-height:1.9;color:#827a6a;max-width:1500px;margin:auto}footer p{margin:0 0 7px}footer a{color:#696e54;text-underline-offset:3px}details{max-width:960px}summary{cursor:pointer;width:fit-content;color:#696e54}details[open] summary{margin-bottom:9px}details ul{padding-left:20px}details li{margin-bottom:6px}.separator{padding:0 8px}.mobile-break{display:none}
 @media(max-width:600px){header{padding:16px 16px 12px}.intro{display:none}nav{gap:6px}nav>button{padding:9px 11px;font-size:12px}.view-controls{width:100%;justify-content:flex-end;margin-top:-2px}.view-controls button{padding:4px 9px}canvas{height:430px}.room-note{left:16px;bottom:12px}.interaction-bar{padding:12px 16px;gap:10px}output{flex-basis:100%;min-height:21px}footer{padding:12px 16px}.mobile-break{display:block}.separator{display:none}.cat-selector button{padding:9px 10px}.interaction-actions button{min-width:75px;padding:9px 12px}}
 @media(prefers-reduced-motion:reduce){button{transition:none}}
+
+/* Context actions stay behind one compact menu; the canvas is the primary control. */
+.cat-profile{font-size:12px;font-weight:600;color:#746e5d;white-space:nowrap}
+.more-actions{position:relative;margin-left:0;z-index:4}
+.more-actions summary{min-height:44px;display:flex;align-items:center;padding:0 14px;border:1px solid #d8d2c4;border-radius:24px;background:#fffdf8;font-size:12px;color:#716e5f;list-style:none;cursor:pointer;white-space:nowrap}
+.more-actions summary::-webkit-details-marker{display:none}
+.more-actions summary::after{content:'⌄';margin-left:8px;font-size:14px}
+.more-actions[open] summary{background:#e7e9dd}
+.more-panel{position:absolute;right:0;bottom:calc(100% + 8px);width:190px;padding:8px;display:grid;gap:5px;border:1px solid #dfd8c8;border-radius:18px;background:#fffdf8;box-shadow:0 12px 40px #45392125}
+.more-panel button{width:100%;min-height:42px;text-align:left;border:0;background:transparent;border-radius:12px;font-size:13px}
+.more-panel button:hover:not(:disabled){background:#eef0e7}
+.interaction-bar output{flex-basis:100%;min-height:18px}
+.room-note{background:#f9f4eacf;padding:7px 10px;border-radius:9px;letter-spacing:.025em;color:#706b5f}
+.touch-guide{display:none}
+.show-ui{position:absolute;right:20px;top:20px;z-index:5;background:#fffdf6d9;box-shadow:0 4px 18px #42351c30}
+button[hidden]{display:none!important}
+body.ui-hidden header,body.ui-hidden .interaction-bar,body.ui-hidden footer,body.ui-hidden .room-note{display:none}
+body.ui-hidden canvas{height:100dvh}
+@media(max-width:600px){
+  .desktop-guide{display:none}.touch-guide{display:inline}
+  .room-note{left:10px;right:10px;bottom:10px;font-size:10px;text-align:center}
+  nav>button,.view-controls button,.cat-selector button,.interaction-actions button{min-height:44px}
+  .cat-profile{order:2;flex-basis:100%}
+  .cat-selector{order:1}.interaction-actions{order:3}.more-actions{order:4;margin-left:auto}.interaction-bar output{order:5}
+  .more-panel{right:0;bottom:calc(100% + 8px)}
+}

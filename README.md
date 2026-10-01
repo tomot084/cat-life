@@ -1,6 +1,6 @@
 # ぷーたんとこころのお部屋
 
-Babylon.jsで動く二匹の部屋。のんびり・おさんぽ・おすわり、ちゅーる・なでる、ドラッグ回転、ホイールズームに対応します。ふれあう猫を選ぶか、猫を直接タップしてなでられます。一時停止は反応・エフェクトも止め、行動モードを切り替えると反応を終了します。
+Babylon.jsで動く二匹の部屋。のんびり・おさんぽ・おすわり、ちゅーる・なでる・ボール遊び・呼ぶなどの操作ができます。猫を選ぶとその子のアクションが表示され、長押しで床の好きな場所へ移せます。
 
 ## ローカル
 
@@ -13,6 +13,17 @@ npm run dev
 
 http://localhost:5173/ を開きます。
 
+## 操作
+
+| 操作 | PC | スマートフォン |
+|---|---|---|
+| 猫を選ぶ | 猫をクリック | 猫をタップ |
+| 猫を移動 | 猫を約0.4秒長押ししてドラッグ | 猫を長押ししてスワイプ |
+| 視点を回す | 猫以外をドラッグ、または猫を短くドラッグ | 猫以外をスワイプ |
+| 拡大・縮小 | ホイール | 2本指ピンチ |
+
+猫を離すと床のその場所に置き、散歩中ならその場所から散歩を続けます。猫の重なりや家具との衝突を避けるよう着地点を調整します。選択中の猫にはちゅーる・なでるが使えます。「ほかの遊び」から呼ぶ、ボール、カメラの寄り、配置と視点のリセット、UI非表示を選べます。一時停止中は反応・エフェクトも止まります。
+
 ## GitHub Pages
 
 公開先リポジトリ： https://github.com/tomot084/cat-life
@@ -23,6 +34,7 @@ Settings → Pages → SourceをGitHub Actionsに設定します。mainへのpus
 ```sh
 PAGES_BUILD=true npm run build
 TEST_BASE=/cat-life/ npm run test:production
+TEST_BASE=/cat-life/ npm run test:controls
 ```
 
 baseはoriginまたはActionsのGITHUB_REPOSITORYから取得します。公開先の推測はしません。ブラウザ検証には `npx playwright install chromium` が必要です。
@@ -49,6 +61,6 @@ baseはoriginまたはActionsのGITHUB_REPOSITORYから取得します。公開�
 
 追加6 GLBは合計198,156 bytes、3,734三角形、画像・外部bufferなし。許可リストとSHA-256は `config/production-room-assets.json`。部屋の木目・布・影・ハートはコードで生成します。実行時に外部CDNへアクセスしません。
 
-`npm run build` は猫2点と小物6点をhash・形式・Creditsと照合し、未知のGLBやZIP、画像、source map、symlink、private情報を拒否します。`npm run test:production` はdistだけを配信して三モード・二匹のふれあい・キャンセル・連打・停止再開・視点・モバイル画面・通信を検証します。
+`npm run build` は猫2点と小物6点をhash・形式・Creditsと照合し、未知のGLBやZIP、画像、source map、symlink、private情報を拒否します。`npm run test:production` はdistだけを配信して三モード・二匹のふれあい・キャンセル・連打・停止再開・視点・モバイル画面・通信を検証します。`npm run test:controls` はタップ、長押し移動、回転、ピンチ、追加アクションのPC/スマホ操作を検証します。
 
 写真・制作途中素材・秘密情報は本リポジトリと公開サイトに含めません。監査の元ZIPとスクリーンショットもdistへコピーしません。

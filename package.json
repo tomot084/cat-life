@@ -10,7 +10,8 @@
     "preview": "vite preview --host 0.0.0.0",
     "test": "tsx --test tests/*.test.ts",
     "audit:dist": "node tools/production/audit-dist.mjs",
-    "test:production": "node tools/production/check-browser.mjs"
+    "test:production": "node tools/production/check-browser.mjs",
+    "test:controls": "node tools/production/check-gestures.mjs"
   },
   "dependencies": {
     "@babylonjs/core": "^9.28.0",
