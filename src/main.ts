@@ -12,7 +12,12 @@ import './production.css';
 (async () => {
   const canvas = document.querySelector('canvas')!;
   const engine = new Engine(canvas, true, { preserveDrawingBuffer: true });
-  engine.setHardwareScalingLevel(Math.max(1, devicePixelRatio / 1.5));
+  const setRenderResolution = () => {
+    const cssPixels = Math.max(1, canvas.clientWidth * canvas.clientHeight);
+    const scale = Math.max(1, Math.min(devicePixelRatio || 1, 2, Math.sqrt(2_000_000 / cssPixels)));
+    engine.setHardwareScalingLevel(1 / scale);
+  };
+  setRenderResolution();
   const scene = new Scene(engine);
   scene.clearColor = new Color4(.94, .925, .89, 1);
   scene.ambientColor = new Color3(.12, .1, .08);
@@ -184,7 +189,9 @@ import './production.css';
     selection.visibility = grabbed === selected ? 1 : .6;
     scene.render();
   });
-  addEventListener('resize', () => engine.resize()); canvas.dataset.ready = 'true';
+  addEventListener('resize', setRenderResolution);
+  new ResizeObserver(setRenderResolution).observe(canvas);
+  canvas.dataset.ready = 'true';
 })().catch(error => {
   const loading = document.querySelector('#loading');
   if (loading) loading.textContent = 'お部屋を読み込めませんでした。ページを再読み込みしてください。';

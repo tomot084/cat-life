@@ -12,6 +12,10 @@ const clamp = (v: number, low: number, high: number) => Math.max(low, Math.min(h
 
 export function attachRoomControls(canvas: HTMLCanvasElement, scene: Scene, camera: ArcRotateCamera,
   cats: Companion[], events: ControlEvents) {
+  const room = canvas.closest('.room-view') ?? canvas;
+  for (const eventName of ['contextmenu', 'dragstart', 'selectstart']) {
+    room.addEventListener(eventName, event => event.preventDefault());
+  }
   const pointers = new Map<number, PointerState>();
   let holdTimer: number | undefined, grabbed = -1, pinchDistance = 0;
   let grabOffsetX = 0, grabOffsetZ = 0;

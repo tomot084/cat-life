@@ -102,11 +102,23 @@ try {
   await desktop.close();
   }
 
-  const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+  const mobileDpr = Number(process.env.TEST_DPR ?? 1);
+  const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: mobileDpr, isMobile: true, hasTouch: true });
   await monitor(mobile); await mobile.goto(origin + base); await mobile.waitForSelector('canvas[data-ready="true"]', { timeout: 90000 });
   assert(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Mobile must not overflow horizontally');
   for (const name of ['のんびり過ごす', 'ふたりでおさんぽ', '並んでおすわり', 'ちゅーる', 'なでる']) assert(await mobile.getByRole('button', { name, exact: true }).isVisible());
   const mobileCanvas = mobile.locator('canvas');
+  const quality = await mobileCanvas.evaluate(canvas => {
+    const style = getComputedStyle(canvas);
+    const blocked = type => !canvas.dispatchEvent(new Event(type, { bubbles: true, cancelable: true }));
+    return { pixelsPerCssPixel: canvas.width / canvas.getBoundingClientRect().width,
+      userSelect: style.userSelect, touchAction: style.touchAction, draggable: canvas.draggable,
+      contextMenuBlocked: blocked('contextmenu'), dragBlocked: blocked('dragstart'), selectionBlocked: blocked('selectstart') };
+  });
+  assert(quality.pixelsPerCssPixel >= Math.min(mobileDpr, 2) - .05, `Mobile canvas too blurry: ${JSON.stringify(quality)}`);
+  assert.equal(quality.userSelect, 'none'); assert.equal(quality.touchAction, 'none');
+  assert.equal(quality.draggable, false);
+  assert(quality.contextMenuBlocked && quality.dragBlocked && quality.selectionBlocked, 'Native copy/drag menu must be suppressed on the room');
   let mb = await mobileCanvas.boundingBox();
   let mx = mb.x + 160, my = mb.y + 230;
   const session = await mobile.context().newCDPSession(mobile);
@@ -130,11 +142,17 @@ try {
   await mobile.waitForTimeout(300);
   assert.notEqual(frozen, await frame(mobileCanvas), 'Mobile pinch must zoom');
   console.log('mobile pinch passed');
+  await click(mobile, '再生'); await more(mobile); await click(mobile, 'UIを隠す');
+  await mobile.waitForFunction(() => {
+    const canvas = document.querySelector('canvas');
+    return canvas.height / canvas.getBoundingClientRect().height >= Math.min(devicePixelRatio, 2) - .05;
+  });
+  await click(mobile, '操作を表示');
   await mobile.screenshot({ path: `${out}/${label}-mobile-controls.png`, fullPage: true, timeout: 90000 });
   await mobile.close();
   assert.equal(errors.length, 0, JSON.stringify(errors));
   assert.equal(badResponses.length, 0, JSON.stringify(badResponses));
-  const report = { passed: true, base, desktop: process.env.MOBILE_ONLY ? [] : ['tap select', 'hold grab', 'floor drag', 'release', 'orbit', 'pet pose', 'call', 'toy', 'focus', 'hide and restore UI', 'reset', 'three modes', 'treat and pet both cats', 'natural completion', 'pause and resume', 'wheel zoom', 'credits'], mobile: ['responsive controls', 'tap select', 'hold grab', 'floor drag', 'release', 'pinch zoom'], errors, badResponses, requests: [...new Set(requests.map(url => url.replace(origin, '')))] };
+  const report = { passed: true, base, desktop: process.env.MOBILE_ONLY ? [] : ['tap select', 'hold grab', 'floor drag', 'release', 'orbit', 'pet pose', 'call', 'toy', 'focus', 'hide and restore UI', 'reset', 'three modes', 'treat and pet both cats', 'natural completion', 'pause and resume', 'wheel zoom', 'credits'], mobile: ['responsive controls', 'tap select', 'hold grab', 'floor drag', 'release', 'pinch zoom', 'native callout blocked', 'fullscreen resolution'], quality, errors, badResponses, requests: [...new Set(requests.map(url => url.replace(origin, '')))] };
   await writeFile(`${out}/${label}-controls.json`, JSON.stringify(report, null, 2));
   console.log(`${base}: ${process.env.MOBILE_ONLY ? 'mobile' : 'desktop and mobile'} gesture controls passed, console error 0, asset 404 0`);
 } finally { await browser.close(); await new Promise(r => server.close(r)); }
