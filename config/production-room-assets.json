@@ -1,0 +1,58 @@
+{
+  "bookcaseOpenLow": {
+    "file": "src/assets/room/bookcaseOpenLow.glb",
+    "author": "Kenney",
+    "source": "https://kenney.nl/assets/furniture-kit",
+    "license": "CC0-1.0",
+    "sha256": "6d4d625faf977a2dbf155f1313cd32c6310e463114a1cd4c08cb9f80a5fb1d75",
+    "bytes": 11520,
+    "triangles": 184
+  },
+  "books": {
+    "file": "src/assets/room/books.glb",
+    "author": "Kenney",
+    "source": "https://kenney.nl/assets/furniture-kit",
+    "license": "CC0-1.0",
+    "sha256": "b8dc56e5d29f6fc1f4727fccb1b9642627fee9942c48060a00034e98df02701c",
+    "bytes": 6864,
+    "triangles": 62
+  },
+  "pillow": {
+    "file": "src/assets/room/pillow.glb",
+    "author": "Kenney",
+    "source": "https://kenney.nl/assets/furniture-kit",
+    "license": "CC0-1.0",
+    "sha256": "6fae7c190d0b676ef3efd35e5178cef21dffb5c80e1257d8b537ad424da0e5f6",
+    "bytes": 5044,
+    "triangles": 50
+  },
+  "plantSmall1": {
+    "file": "src/assets/room/plantSmall1.glb",
+    "author": "Kenney",
+    "source": "https://kenney.nl/assets/furniture-kit",
+    "license": "CC0-1.0",
+    "sha256": "2b9c022feb47be857b2c4fdc29f36522766ba9b70c578c31d7c05d71b4377d15",
+    "bytes": 8224,
+    "triangles": 102
+  },
+  "cat-tree": {
+    "file": "src/assets/room/cat-tree.glb",
+    "author": "3D Assets (@3dassets)",
+    "source": "https://3dassets.dev/assets/companion-animals-and-pet-home-cat-tree-e126b0aa",
+    "license": "CC0-1.0",
+    "aiGenerated": true,
+    "sha256": "ad6bbf52e92eec2271595e0b039d863a0315ee15eaac533b770aff52ab1e1272",
+    "bytes": 124148,
+    "triangles": 2504
+  },
+  "cat-bed": {
+    "file": "src/assets/room/cat-bed.glb",
+    "author": "3D Assets (@3dassets)",
+    "source": "https://3dassets.dev/assets/companion-animals-and-pet-home-cushion-bed-27a23ea4",
+    "license": "CC0-1.0",
+    "aiGenerated": true,
+    "sha256": "1a09bb8e1d8c136e38cdb5ceb9a54e2f5c09cf8c0b40a486cb8dfd25786b2031",
+    "bytes": 42356,
+    "triangles": 832
+  }
+}

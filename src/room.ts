@@ -1,48 +1,147 @@
-import { Color3 } from '@babylonjs/core/Maths/math.color';
-import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
-import { Scene } from '@babylonjs/core/scene';
-import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
-import { Vector3 } from '@babylonjs/core/Maths/math.vector';
-import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
-function material(scene: Scene, name: string, hex: string): StandardMaterial {
+import { Color3, DynamicTexture, ImportMeshAsync, Mesh, MeshBuilder, PBRMaterial, Scene, ShadowGenerator, StandardMaterial, TransformNode, Vector3 } from '@babylonjs/core';
+import treeUrl from './assets/room/cat-tree.glb?url';
+import bedUrl from './assets/room/cat-bed.glb?url';
+import shelfUrl from './assets/room/bookcaseOpenLow.glb?url';
+import booksUrl from './assets/room/books.glb?url';
+import pillowUrl from './assets/room/pillow.glb?url';
+import plantUrl from './assets/room/plantSmall1.glb?url';
+
+export function material(scene: Scene, name: string, hex: string): StandardMaterial {
   const mat = new StandardMaterial(name, scene);
   mat.diffuseColor = Color3.FromHexString(hex);
-  mat.specularColor = new Color3(.08,.08,.08);
+  mat.specularColor.setAll(.06);
   return mat;
 }
 
-export function createRoom(scene: Scene, shadows: ShadowGenerator): void {
-  const wood = material(scene, 'oak', '#d9bb91');
-  const wall = material(scene, 'plaster', '#ede5d5');
-  const trim = material(scene, 'trim', '#b0bda9');
-  const rug = material(scene, 'rug', '#a7b7a1');
-  const cushion = material(scene, 'cushion', '#d8a995');
-  const box = (name: string, size: number[], position: number[], mat = wood) => {
-    const mesh = MeshBuilder.CreateBox(name, { width: size[0], height: size[1], depth: size[2] }, scene);
-    mesh.position.set(position[0], position[1], position[2]);
-    mesh.material = mat;
-    mesh.receiveShadows = true;
-    shadows.addShadowCaster(mesh);
+// Small, deterministic, code-drawn surfaces; no photo or remote texture requests.
+function surface(scene: Scene, kind: 'wood' | 'linen'): DynamicTexture {
+  const texture = new DynamicTexture(kind, { width: 512, height: 512 }, scene, true);
+  const ctx = texture.getContext() as CanvasRenderingContext2D;
+  let seed = 37;
+  const random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  ctx.fillStyle = kind === 'wood' ? '#cfb58c' : '#c4c9b4';
+  ctx.fillRect(0, 0, 512, 512);
+  if (kind === 'wood') {
+    for (let row = 0; row < 8; row++) {
+      ctx.fillStyle = `rgba(102,69,36,${.02 + random() * .08})`;
+      ctx.fillRect(0, row * 64, 512, 64);
+      ctx.fillStyle = 'rgba(89,68,44,.22)';
+      ctx.fillRect(0, row * 64, 512, 1);
+      ctx.fillRect((row % 3) * 170, row * 64, 1, 64);
+      for (let j = 0; j < 40; j++) {
+        ctx.strokeStyle = `rgba(109,74,42,${random() * .13})`;
+        ctx.beginPath();
+        const y = row * 64 + random() * 64;
+        ctx.moveTo(0, y); ctx.bezierCurveTo(170, y + 2, 340, y - 2, 512, y); ctx.stroke();
+      }
+    }
+  } else {
+    for (let i = 0; i < 512; i += 3) {
+      ctx.fillStyle = `rgba(255,255,241,${.08 + random() * .1})`;
+      ctx.fillRect(i, 0, 1, 512); ctx.fillRect(0, i, 512, 1);
+    }
+    ctx.strokeStyle = '#e0dfca'; ctx.lineWidth = 10; ctx.strokeRect(14, 14, 484, 484);
+    ctx.lineWidth = 2; ctx.strokeRect(25, 25, 462, 462);
+  }
+  texture.update();
+  return texture;
+}
+
+export async function createRoom(scene: Scene, shadows: ShadowGenerator): Promise<void> {
+  const wood = material(scene, 'warm oak', '#ffffff'); wood.diffuseTexture = surface(scene, 'wood');
+  const wall = material(scene, 'warm plaster', '#eee7da');
+  wall.emissiveColor.set(.12, .11, .09);
+  const trim = material(scene, 'ivory joinery', '#f4ecdf');
+  const linen = material(scene, 'woven sage', '#ffffff'); linen.diffuseTexture = surface(scene, 'linen');
+  const ceramic = material(scene, 'cream ceramic', '#e8dfcd'); ceramic.specularColor.setAll(.25);
+  const rope = material(scene, 'sisal', '#b99b74');
+  const peach = material(scene, 'terracotta', '#c88e72');
+  const finish = (mesh: Mesh, position: number[], mat: StandardMaterial, cast = true) => {
+    mesh.position.set(position[0], position[1], position[2]); mesh.material = mat;
+    mesh.receiveShadows = true; mesh.isPickable = false;
+    if (cast) shadows.addShadowCaster(mesh);
     return mesh;
   };
-  box('floor', [9, 0.18, 7], [0, -0.1, 0]);
-  for (let x = -4; x <= 4; x += 0.5) box('floor-seam', [0.014, 0.002, 7], [x, -0.008, 0], trim);
-  box('back-wall', [9, 2.8, 0.14], [0, 1.3, -3.5], wall);
-  box('side-wall', [0.14, 2.8, 7], [-4.5, 1.3, 0], wall);
-  box('skirting', [9, 0.13, 0.06], [0, 0.08, -3.4], trim);
-  box('rug', [4.9, 0.018, 3.5], [0.3, 0.002, 0.3], rug);
-  box('window-frame', [2.8, 1.55, 0.13], [0.2, 1.7, -3.37], wood);
-  const sky = material(scene, 'sky', '#bcd6d4');
-  sky.emissiveColor = new Color3(0.22, 0.29, 0.29);
-  box('window', [2.58, 1.33, 0.04], [0.2, 1.7, -3.28], sky);
-  box('window-bar', [0.06, 1.4, 0.06], [0.2, 1.7, -3.23], wood);
-  box('window-bar', [2.65, 0.06, 0.06], [0.2, 1.7, -3.23], wood);
-  // Furniture sits outside the navigation rectangle; no obstacle pathfinding in Phase 1.
-  for (const x of [-2.7, 2.8]) {
-    const bed = MeshBuilder.CreateCylinder('cat-bed', { diameter: 1.1, height: 0.14, tessellation: 40 }, scene);
-    bed.position = new Vector3(x, 0.07, -2.95);
-    bed.material = cushion;
-    bed.receiveShadows = true;
-    shadows.addShadowCaster(bed);
+  const box = (name: string, size: number[], position: number[], mat = wood, cast = true) =>
+    finish(MeshBuilder.CreateBox(name, { width: size[0], height: size[1], depth: size[2] }, scene), position, mat, cast);
+  const cylinder = (name: string, diameter: number, height: number, position: number[], mat = ceramic) =>
+    finish(MeshBuilder.CreateCylinder(name, { diameter, height, tessellation: 32 }, scene), position, mat);
+  box('floor', [9, .18, 7], [0, -.1, 0], wood, false);
+  box('back-wall', [9, 3.25, .14], [0, 1.53, -3.5], wall, false);
+  box('side-wall', [.14, 3.25, 7], [-4.5, 1.53, 0], wall, false);
+  box('back-skirting', [9, .15, .06], [0, .075, -3.4], trim);
+  box('side-skirting', [.06, .15, 7], [-4.4, .075, 0], trim);
+  box('rug', [4.7, .026, 3.6], [.1, .005, .45], linen, false);
+  // Window, deep sill and gently folded curtains frame the cats without a photo backdrop.
+  box('window-frame', [3, 1.72, .16], [.1, 2.02, -3.35], trim);
+  const sky = material(scene, 'daylight', '#bad9dc'); sky.emissiveColor.set(.24, .29, .29);
+  box('window', [2.8, 1.52, .035], [.1, 2.02, -3.25], sky, false);
+  for (const x of [-.62, .82]) box('window-mullion', [.045, 1.56, .07], [x, 2.02, -3.2], trim);
+  box('window-crossbar', [2.85, .05, .07], [.1, 2.0, -3.2], trim);
+  box('window-sill', [3.25, .09, .5], [.1, 1.15, -3.1], wood);
+  const curtain = material(scene, 'curtain linen', '#f6efdf');
+  for (const side of [-1, 1]) for (let i = 0; i < 6; i++) {
+    const fold = cylinder('curtain-fold', .15, 1.93, [.1 + side * (1.37 + i * .07), 1.95, -3.05], curtain);
+    fold.scaling.z = .65;
   }
+  box('curtain-rail', [3.85, .045, .045], [.1, 2.97, -3.06], rope);
+
+  // All furniture stays outside both existing walking circles and the interaction space.
+  async function prop(url: string, name: string, height: number, position: number[], yaw = 0) {
+    const result = await ImportMeshAsync(url, scene, { pluginExtension: '.glb' });
+    const root = new TransformNode(name, scene);
+    for (const node of [...result.meshes, ...result.transformNodes]) if (!node.parent) node.parent = root;
+    const bounds = root.getHierarchyBoundingVectors(true);
+    const scale = height / (bounds.max.y - bounds.min.y);
+    const center = bounds.min.add(bounds.max).scale(.5);
+    // Center the model in its own coordinates before applying its room orientation.
+    const placement = new TransformNode(`${name}-placement`, scene);
+    root.parent = placement; root.scaling.setAll(scale);
+    root.position.set(-center.x * scale, -bounds.min.y * scale, -center.z * scale);
+    placement.position.set(...position as [number, number, number]); placement.rotation.y = yaw;
+    for (const mesh of result.meshes) {
+      mesh.isPickable = false; mesh.receiveShadows = true;
+      if (mesh.getTotalVertices()) shadows.addShadowCaster(mesh);
+    }
+    // Soften the original saturated palette. Geometry and downloaded files remain intact.
+    for (const mesh of result.meshes) if (mesh.material instanceof PBRMaterial) {
+      const mat = mesh.material;
+      const palette: Record<string, string> = { mint: '#a6b69a', blush: '#c99680', wool: '#eee1ca' };
+      if (palette[mat.name]) mat.albedoColor = Color3.FromHexString(palette[mat.name]);
+      mat.roughness = .92;
+    }
+    return placement;
+  }
+  await prop(treeUrl, 'cat-tree', 2.7, [-3.05, 0, -2.25], 0);
+  await prop(bedUrl, 'cat-bed', .43, [3.15, .015, -.45]);
+  await prop(shelfUrl, 'bookcase', 1.1, [2.85, 0, -2.97]);
+  await prop(booksUrl, 'books', .33, [2.6, 1.1, -2.93], -.1);
+  await prop(plantUrl, 'plant', .55, [.95, 1.2, -3.0]);
+  await prop(pillowUrl, 'pillow', .38, [3.15, .10, -.6], .25);
+
+  // A feeding corner with visibly recessed bowls and separate water and kibble.
+  box('feeding-mat', [1.7, .018, .9], [3.2, .005, 2.35], linen, false);
+  const water = material(scene, 'water', '#81b1b4'); water.specularColor.setAll(.65);
+  const food = material(scene, 'kibble', '#725237');
+  for (const [i, x] of [2.78, 3.62].entries()) {
+    cylinder(i ? 'water-bowl' : 'food-bowl', .63, .12, [x, .09, 2.35]);
+    finish(MeshBuilder.CreateTorus('bowl-rim', { diameter: .54, thickness: .1, tessellation: 32 }, scene), [x, .16, 2.35], ceramic);
+    cylinder('bowl-interior', .45, .01, [x, .152, 2.35], i ? water : food);
+    if (!i) for (let n = 0; n < 13; n++) {
+      const angle = n * 2.4, radius = .04 + .12 * ((n % 4) / 3);
+      const bit = finish(MeshBuilder.CreateSphere('kibble', { diameter: .055, segments: 6 }, scene), [x + Math.cos(angle) * radius, .178, 2.35 + Math.sin(angle) * radius], food, false);
+      bit.scaling.y = .65;
+    }
+  }
+  box('scratch-pad', [.65, .1, 1.25], [-3.15, .06, .1], rope);
+  for (let i = 0; i < 22; i++) box('scratch-ridge', [.57, .009, .014], [-3.15, .115, -.47 + i * .054], ceramic, false);
+  const ball = finish(MeshBuilder.CreateSphere('toy-ball', { diameter: .24, segments: 16 }, scene), [-1.7, .13, 2.2], peach);
+  const stripe = finish(MeshBuilder.CreateTorus('ball-stripe', { diameter: .237, thickness: .018, tessellation: 24 }, scene), [-1.7, .13, 2.2], ceramic, false);
+  stripe.rotation.z = .7; ball.rotation.z = .7;
+  const wand = box('toy-wand', [.035, .035, .85], [-2.8, .04, 1.7], wood);
+  wand.rotation.y = -.6;
+  const string = MeshBuilder.CreateTube('toy-string', { path: [new Vector3(-2.55,.03,1.35), new Vector3(-2.28,.03,1.2), new Vector3(-2.15,.03,1.38)], radius: .009, tessellation: 6 }, scene);
+  string.material = rope; string.isPickable = false;
+  const feather = finish(MeshBuilder.CreateSphere('toy-feather', { diameter: .15, segments: 8 }, scene), [-2.14, .06, 1.4], peach);
+  feather.scaling.set(.7, .5, 2);
 }

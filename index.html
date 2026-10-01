@@ -1,1 +1,41 @@
-<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>ぷーたんとこころのお部屋</title><header><small>CAT LIFE · ふたりのお部屋</small><h1>ぷーたんと、こころ。</h1><nav><button data-mode="relax">のんびり過ごす</button><button data-mode="walk">ふたりでおさんぽ</button><button data-mode="sit">並んでおすわり</button><button id="pause">一時停止</button><button id="reset">視点を戻す</button></nav></header><canvas aria-label="ぷーたんとこころが一緒にいる3Dの部屋"></canvas><div id="loading" role="status">ふたりのお部屋を準備しています…</div><footer aria-label="Credits">茶白：ぷーたん ／ 黒灰白：こころ · ドラッグで回転、ホイールで拡大。<br>Base: <a href="https://sketchfab.com/3d-models/tuxedo-cat-animated-20-783fcb78b55b4394a212c2b6392e1113">Tuxedo Cat Animated 2.0</a> by DreamNoms · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> · ぷーたん・こころ向けに体型・顔・色柄・眼と耳の位置を改変。 改変モデルもCC BY 4.0で提供。</footer><script type="module" src="/src/main.ts"></script></html>
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f4f0e7">
+  <link rel="icon" href="data:,">
+  <title>ぷーたんとこころのお部屋</title>
+</head>
+<body>
+  <header>
+    <div class="heading"><div><small>CAT LIFE · ふたりのお部屋</small><h1>ぷーたんと、こころ。</h1></div><p class="intro">窓辺のひだまり。<br>今日も、ふたりのペースで。</p></div>
+    <nav aria-label="ふたりの過ごし方">
+      <button data-mode="relax" disabled>のんびり過ごす</button>
+      <button data-mode="walk" disabled>ふたりでおさんぽ</button>
+      <button data-mode="sit" disabled>並んでおすわり</button>
+      <span class="view-controls"><button id="pause" disabled>一時停止</button><button id="reset" disabled>視点を戻す</button></span>
+    </nav>
+  </header>
+  <main>
+    <div class="room-view"><canvas aria-label="ぷーたんとこころが一緒にいる3Dの部屋"></canvas><span class="room-note">ふたりの、いつもの場所</span><div id="loading" role="status">ふたりのお部屋を準備しています…</div></div>
+    <section class="interaction-bar" aria-label="猫とふれあう">
+      <div class="cat-selector" role="group" aria-label="ふれあう猫"><button data-cat="0" disabled><span class="cat-dot purin"></span>ぷーたん</button><button data-cat="1" disabled><span class="cat-dot kokoro"></span>こころ</button></div>
+      <div class="interaction-actions"><button data-interaction="treat" disabled>ちゅーる</button><button data-interaction="pet" disabled>なでる</button></div>
+      <output id="interaction-status" aria-live="polite">ふたりの、いつものひととき。</output>
+    </section>
+  </main>
+  <footer aria-label="Credits">
+    <p>茶白：ぷーたん ／ 黒灰白：こころ <span class="separator">·</span> 猫をタップしても、なでられます。<br class="mobile-break"> ドラッグで回転、ホイール・ピンチで拡大。</p>
+    <details><summary>素材とつくり手 · Credits</summary>
+      <p><a href="https://sketchfab.com/3d-models/tuxedo-cat-animated-20-783fcb78b55b4394a212c2b6392e1113">Tuxedo Cat Animated 2.0</a> — DreamNoms / <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a><br>ぷーたん・こころ向けに体型・顔・色柄・眼と耳の位置を改変。改変猫モデルもCC BY 4.0で提供。</p>
+      <ul>
+        <li><a href="https://3dassets.dev/assets/companion-animals-and-pet-home-cat-tree-e126b0aa">Cat Tree</a>、<a href="https://3dassets.dev/assets/companion-animals-and-pet-home-cushion-bed-27a23ea4">Cushion Bed</a> — 3D Assets (@3dassets) / <a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0</a>。スケール・配置・材質色を調整。配布元にAI生成の表記あり。</li>
+        <li><a href="https://kenney.nl/assets/furniture-kit">Furniture Kit: bookcaseOpenLow（棚）、books（本）、pillow（クッション）、plantSmall1（鉢植え）</a> — Kenney / <a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0</a>。スケール・配置・材質の粗さを調整。</li>
+      </ul>
+      <p>部屋・食器・おもちゃ・ふれあい演出は、このお部屋用に制作しました。</p>
+    </details>
+  </footer>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
