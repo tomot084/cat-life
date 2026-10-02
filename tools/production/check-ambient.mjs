@@ -37,6 +37,9 @@ try {
       ]);
       await mkdir('artifacts/ambient-life', { recursive: true });
       await page.screenshot({ path: 'artifacts/ambient-life/desktop-daily-cycle.png', fullPage: true, timeout: 90000 });
+      await page.waitForFunction(() => document.querySelector('#daily-life').textContent.includes('こころ：お水'), null, { timeout: 120000 });
+      await page.waitForTimeout(800);
+      await page.screenshot({ path: 'artifacts/ambient-life/desktop-water.png', fullPage: true, timeout: 90000 });
       console.log('desktop: natural eating and ball play observed');
     }
     await page.getByRole('button', { name: 'ぷーたん', exact: true }).click();
@@ -64,9 +67,24 @@ try {
       await page.mouse.up();
       assert((await page.locator('#interaction-status').innerText()).includes('タワーの上にのせました'));
       await page.screenshot({ path: 'artifacts/ambient-life/desktop-manual-perch.png', fullPage: true, timeout: 90000 });
+    } else {
+      const box = await page.locator('canvas').boundingBox();
+      const session = await page.context().newCDPSession(page);
+      const touch = (type, points) => session.send('Input.dispatchTouchEvent', {
+        type, touchPoints: points.map(([x, y, id]) => ({ x, y, id })),
+      });
+      await touch('touchStart', [[box.x + 160, box.y + 230, 1]]);
+      await page.waitForTimeout(600);
+      assert((await page.locator('#interaction-status').innerText()).includes('つかみました'));
+      await touch('touchMove', [[box.x + 250, box.y + 136, 1]]);
+      await page.waitForTimeout(250);
+      await touch('touchEnd', []);
+      assert((await page.locator('#interaction-status').innerText()).includes('タワーの上にのせました'));
+      await page.waitForTimeout(650);
+      await page.screenshot({ path: 'artifacts/ambient-life/mobile-manual-perch.png', fullPage: true, timeout: 90000 });
     }
     await page.close();
-    console.log(`${mobile ? 'mobile' : 'desktop'}: daily walk, tower climb, pet on perch, mode change, reset${mobile ? '' : ', manual tower placement'} passed`);
+    console.log(`${mobile ? 'mobile' : 'desktop'}: daily walk, tower climb, pet on perch, mode change, reset, manual tower placement passed`);
   }
   assert.deepEqual(errors, []); assert.deepEqual(badResponses, []);
   console.log(`${base}: ambient life passed, console error 0, asset 404 0`);

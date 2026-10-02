@@ -1,4 +1,4 @@
-import { Quaternion, Scene, TransformNode, Vector3 } from '@babylonjs/core';
+import { Color3, MeshBuilder, Quaternion, Scene, StandardMaterial, TransformNode, Vector3 } from '@babylonjs/core';
 import type { Companion } from './interactions';
 import { LIFE_SPOTS, planFloorRoute, safeFloorPoint, TOWER_APPROACH, TOWER_PERCH, type FloorPoint } from './placement';
 
@@ -8,6 +8,7 @@ type JointPose = { node: TransformNode; rotation: Quaternion; scale: Vector3 };
 type Actor = {
   stage: Stage; activity: DailyActivity; time: number; duration: number; sequence: number;
   route: FloorPoint[]; waypoint: number; pose?: Map<string, JointPose>;
+  actOrigin?: Vector3;
   jumpFrom?: Vector3; jumpTo?: Vector3; afterLanding?: () => void; blocked: number;
 };
 const routines: DailyActivity[][] = [
@@ -30,6 +31,17 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     duration: 0, sequence: 0, route: [], waypoint: 0, blocked: 0 }));
   const ball = scene.getMeshByName('toy-ball'), stripe = scene.getMeshByName('ball-stripe');
   const ballHome = ball?.position.clone(), stripeHome = stripe?.position.clone();
+  const ballRotation = ball?.rotation.clone(), stripeRotation = stripe?.rotation.clone();
+  const rippleMaterial = new StandardMaterial('water ripple', scene);
+  rippleMaterial.emissiveColor = Color3.FromHexString('#b9e0dc');
+  rippleMaterial.diffuseColor = Color3.FromHexString('#b9e0dc');
+  rippleMaterial.alpha = .55;
+  const ripples = cats.map(cat => {
+    const ripple = MeshBuilder.CreateTorus(`${cat.key}-water-ripple`, { diameter: .34, thickness: .008, tessellation: 28 }, scene);
+    ripple.position.set(3.62, .18, 2.35); ripple.material = rippleMaterial;
+    ripple.isPickable = false; ripple.setEnabled(false);
+    return ripple;
+  });
   let enabled = false, paused = false, towerOwner = -1, ballOwner = -1;
   const announce = (index: number, activity: DailyActivity, label = labels[activity]) => onActivity(index, activity, label);
   const group = (cat: Companion) => cat.groups.find(g => g.name === cat.action)!;
@@ -37,7 +49,15 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     if (ballOwner !== index) return;
     if (ball && ballHome) ball.position.copyFrom(ballHome);
     if (stripe && stripeHome) stripe.position.copyFrom(stripeHome);
+    if (ball && ballRotation) ball.rotation.copyFrom(ballRotation);
+    if (stripe && stripeRotation) stripe.rotation.copyFrom(stripeRotation);
     ballOwner = -1;
+  }
+  function restoreAction(index: number) {
+    const actor = actors[index];
+    if (actor.actOrigin) cats[index].root.position.copyFrom(actor.actOrigin);
+    actor.actOrigin = undefined;
+    ripples[index].setEnabled(false);
   }
   function restorePose(actor: Actor) {
     if (!actor.pose) return;
@@ -48,7 +68,10 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
   }
   function capturePose(index: number) {
     const pose = new Map<string, JointPose>();
-    for (const name of ['Head', 'Eye.L', 'Eye.R', 'Ear.L', 'Ear.R', 'TailBase', 'front_foot.L']) {
+    for (const name of ['spine.008', 'spine.009', 'spine.010', 'Head', 'Eye.L', 'Eye.R',
+      'Ear.L', 'Ear.R', 'TailBase', 'shoulder.L', 'shoulder.R',
+      'front_thigh.L', 'front_thigh.R', 'front_shin.L', 'front_shin.R',
+      'front_foot.L', 'front_foot.R']) {
       const node = cats[index].nodes.find(n => n.name === name);
       if (node) pose.set(name, { node, rotation: node.rotationQuaternion?.clone() ?? Quaternion.FromEulerVector(node.rotation), scale: node.scaling.clone() });
     }
@@ -60,13 +83,13 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     pose.node.scaling.copyFrom(pose.scale); pose.node.scaling.y *= eye;
   }
   function interrupt(index: number) {
-    const actor = actors[index]; restorePose(actor); restoreBall(index);
+    const actor = actors[index]; restorePose(actor); restoreAction(index); restoreBall(index);
     if (actor.stage === 'walk') play(cats[index], 'IdleNorm');
     actor.stage = 'manual'; actor.time = 0; actor.route = []; actor.waypoint = 0; actor.afterLanding = undefined;
     if (towerOwner === index && cats[index].supportY < .1 && cats[index].root.position.y < cats[index].baseY + .15) towerOwner = -1;
   }
   function wait(index: number, duration: number) {
-    const actor = actors[index]; restorePose(actor); restoreBall(index);
+    const actor = actors[index]; restorePose(actor); restoreAction(index); restoreBall(index);
     actor.stage = 'wait'; actor.activity = 'rest'; actor.time = 0; actor.duration = duration;
     play(cats[index], 'IdleNorm'); announce(index, 'rest');
   }
@@ -80,11 +103,15 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     if (activity === 'doze' || activity === 'eat' || activity === 'drink' || activity === 'ball') {
       group(cat).goToFrame(group(cat).from); group(cat).pause(); capturePose(index);
     }
-    if (activity === 'ball') ballOwner = index;
+    if (activity === 'ball') {
+      ballOwner = index; actor.actOrigin = cat.root.position.clone();
+      if (ballHome) cat.root.rotation.y = angle(cat.root.position, ballHome);
+    }
     if (activity === 'eat' || activity === 'drink') {
       const bowl = activity === 'eat' ? { x: 2.78, z: 2.35 } : { x: 3.62, z: 2.35 };
       cat.root.rotation.y = angle(cat.root.position, bowl);
     }
+    if (activity === 'drink') ripples[index].setEnabled(true);
     announce(index, activity);
   }
   function startActivity(index: number, activity: DailyActivity) {
@@ -113,7 +140,7 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     wait(index, 2);
   }
   function finish(index: number) {
-    restorePose(actors[index]); restoreBall(index); wait(index, 1.4);
+    restorePose(actors[index]); restoreAction(index); restoreBall(index); wait(index, 1.4);
   }
   function beginJump(index: number, up: boolean, afterLanding?: () => void) {
     const actor = actors[index], cat = cats[index]; restorePose(actor);
@@ -177,7 +204,7 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     }
   }
   function tickAct(index: number, dt: number) {
-    const actor = actors[index]; actor.time += dt;
+    const actor = actors[index], cat = cats[index]; actor.time += dt;
     if (actor.pose) {
       restorePose(actor); capturePose(index);
       const t = actor.time;
@@ -186,17 +213,53 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
         bend(actor, 'Eye.L', 0, 0, 0, .32); bend(actor, 'Eye.R', 0, 0, 0, .32);
         bend(actor, 'TailBase', 0, 0, .12 * Math.sin(t * 1.5));
       } else if (actor.activity === 'eat' || actor.activity === 'drink') {
-        bend(actor, 'Head', 0, .28 + .12 * Math.sin(t * 7));
-        bend(actor, 'Ear.L', 0, 0, .03 * Math.sin(t * 5));
-        bend(actor, 'Ear.R', 0, 0, -.03 * Math.sin(t * 5));
+        const drinking = actor.activity === 'drink';
+        const rhythm = Math.sin(t * (drinking ? 11 : 6.5));
+        const lean = smooth(Math.min(1, t / .45)) * (1 - smooth(Math.max(0, (t - actor.duration + .55) / .55)));
+        bend(actor, 'spine.008', 0, .12 * lean);
+        bend(actor, 'spine.009', 0, .19 * lean);
+        bend(actor, 'spine.010', 0, .28 * lean);
+        bend(actor, 'Head', 0, (.55 + (drinking ? .1 : .07) * rhythm) * lean);
+        bend(actor, 'shoulder.L', 0, -.13 * lean); bend(actor, 'shoulder.R', 0, -.13 * lean);
+        bend(actor, 'front_thigh.L', 0, .24 * lean); bend(actor, 'front_thigh.R', 0, .24 * lean);
+        bend(actor, 'front_shin.L', 0, -.22 * lean); bend(actor, 'front_shin.R', 0, -.22 * lean);
+        bend(actor, 'Ear.L', 0, 0, .035 * rhythm * lean);
+        bend(actor, 'Ear.R', 0, 0, -.035 * rhythm * lean);
+        if (drinking) {
+          const ripple = ripples[index], phase = (t * 3.5) % 1;
+          ripple.scaling.setAll(.45 + phase * .9);
+          ripple.visibility = (1 - phase) * .7 * lean;
+        }
       } else if (actor.activity === 'ball') {
-        bend(actor, 'Head', .12 * Math.sin(t * 4), .07 * Math.sin(t * 6));
-        bend(actor, 'front_foot.L', 0, .28 * Math.max(0, Math.sin(t * 6)));
+        const strikeL = Math.max(0, 1 - Math.abs(t - .95) / .43);
+        const strikeR = Math.max(0, 1 - Math.abs(t - 3.0) / .43);
+        const first = smooth(Math.max(0, Math.min(1, (t - .95) / .48)));
+        const second = smooth(Math.max(0, Math.min(1, (t - 3.0) / .5)));
+        const forward = .14 * smooth(Math.min(1, t / 1.8)) * (1 - smooth(Math.max(0, Math.min(1, (t - 4.15) / .8))));
+        if (actor.actOrigin) {
+          cat.root.position.copyFrom(actor.actOrigin);
+          cat.root.position.x += Math.sin(cat.root.rotation.y) * forward;
+          cat.root.position.z += Math.cos(cat.root.rotation.y) * forward;
+        }
+        bend(actor, 'spine.009', 0, .11);
+        bend(actor, 'spine.010', 0, .09);
+        bend(actor, 'Head', .1 + .14 * first - .12 * second, .14 + .13 * Math.max(strikeL, strikeR));
+        bend(actor, 'shoulder.L', 0, -.2 * strikeL);
+        bend(actor, 'front_thigh.L', 0, .48 * strikeL);
+        bend(actor, 'front_shin.L', 0, -.27 * strikeL);
+        bend(actor, 'front_foot.L', 0, .3 * strikeL);
+        bend(actor, 'shoulder.R', 0, -.2 * strikeR);
+        bend(actor, 'front_thigh.R', 0, .48 * strikeR);
+        bend(actor, 'front_shin.R', 0, -.27 * strikeR);
+        bend(actor, 'front_foot.R', 0, .3 * strikeR);
+        bend(actor, 'TailBase', 0, 0, .12 * Math.sin(t * 4));
         if (ball && stripe && ballHome && stripeHome) {
           ball.position.copyFrom(ballHome); stripe.position.copyFrom(stripeHome);
-          const dx = .18 * Math.sin(t * 4), dz = .11 * Math.sin(t * 2.5);
+          const dx = .42 * first - .37 * second, dz = .08 * first + .04 * second;
           ball.position.x += dx; ball.position.z += dz;
           stripe.position.x += dx; stripe.position.z += dz;
+          if (ballRotation) ball.rotation.z = ballRotation.z - dx / .12;
+          if (stripeRotation) stripe.rotation.z = stripeRotation.z - dx / .12;
         }
       }
     }

@@ -5,6 +5,7 @@ import shelfUrl from './assets/room/bookcaseOpenLow.glb?url';
 import booksUrl from './assets/room/books.glb?url';
 import pillowUrl from './assets/room/pillow.glb?url';
 import plantUrl from './assets/room/plantSmall1.glb?url';
+import { TOWER_PERCH } from './placement';
 
 export function material(scene: Scene, name: string, hex: string): StandardMaterial {
   const mat = new StandardMaterial(name, scene);
@@ -113,6 +114,11 @@ export async function createRoom(scene: Scene, shadows: ShadowGenerator): Promis
     return placement;
   }
   await prop(treeUrl, 'cat-tree', 2.7, [-3.05, 0, -2.25], 0);
+  // The source middle deck is narrower than a seated cat. A matching shelf
+  // under it gives the full body a visible, continuous landing surface.
+  const perchWood = material(scene, 'tower perch sage', '#a6b69a');
+  box('tower-perch-extension', [1.35, .09, 1.12],
+    [TOWER_PERCH.x, TOWER_PERCH.y - .045, TOWER_PERCH.z], perchWood);
   await prop(bedUrl, 'cat-bed', .43, [3.15, .015, -.45]);
   await prop(shelfUrl, 'bookcase', 1.1, [2.85, 0, -2.97]);
   await prop(booksUrl, 'books', .33, [2.6, 1.1, -2.93], -.1);
@@ -135,8 +141,8 @@ export async function createRoom(scene: Scene, shadows: ShadowGenerator): Promis
   }
   box('scratch-pad', [.65, .1, 1.25], [-3.15, .06, .1], rope);
   for (let i = 0; i < 22; i++) box('scratch-ridge', [.57, .009, .014], [-3.15, .115, -.47 + i * .054], ceramic, false);
-  const ball = finish(MeshBuilder.CreateSphere('toy-ball', { diameter: .24, segments: 16 }, scene), [-1.7, .13, 2.2], peach);
-  const stripe = finish(MeshBuilder.CreateTorus('ball-stripe', { diameter: .237, thickness: .018, tessellation: 24 }, scene), [-1.7, .13, 2.2], ceramic, false);
+  const ball = finish(MeshBuilder.CreateSphere('toy-ball', { diameter: .24, segments: 16 }, scene), [-1.7, .13, 2.03], peach);
+  const stripe = finish(MeshBuilder.CreateTorus('ball-stripe', { diameter: .237, thickness: .018, tessellation: 24 }, scene), [-1.7, .13, 2.03], ceramic, false);
   stripe.rotation.z = .7; ball.rotation.z = .7;
   const wand = box('toy-wand', [.035, .035, .85], [-2.8, .04, 1.7], wood);
   wand.rotation.y = -.6;

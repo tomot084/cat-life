@@ -2,20 +2,20 @@
 export type FloorPoint = { x: number; z: number };
 // The middle deck was measured from the upward-facing triangles of cat-tree.glb
 // after its production scale and placement are applied.
-export const TOWER_PERCH = { x: -2.66, z: -2.01, y: 2.05, dropRadius: .86 } as const;
+export const TOWER_PERCH = { x: -2.66, z: -2.01, y: 2.05, dropRadius: 1.22 } as const;
 export const TOWER_APPROACH: FloorPoint = { x: -1.92, z: -1.24 };
 export const LIFE_SPOTS = {
   bed: { x: 1.94, z: -.55 },
-  food: { x: 2.78, z: 1.25 },
-  water: { x: 3.55, z: 1.26 },
-  ball: { x: -1.68, z: 1.08 },
+  food: { x: 2.78, z: 1.72 },
+  water: { x: 3.62, z: 1.72 },
+  ball: { x: -1.70, z: 1.57 },
   wander: [{ x: -.8, z: -.7 }, { x: .7, z: -1.25 }, { x: .8, z: 1.55 }, { x: -1.3, z: .55 }],
 } as const;
 const furniture = [
   { x: -3.05, z: -2.25, radius: 1.0 }, // cat tree
   { x: 3.15, z: -.45, radius: 1.05 }, // bed
   { x: 2.85, z: -2.97, radius: 1.0 }, // bookcase
-  { x: 3.2, z: 2.35, radius: 1.05 }, // feeding station
+  { x: 3.2, z: 2.35, radius: .68 }, // leave room for a cat's muzzle at either bowl
   { x: -3.15, z: .1, radius: .75 }, // scratching pad
 ];
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
