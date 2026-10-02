@@ -20,6 +20,7 @@ footer{padding:12px 4vw 20px;font-size:11px;line-height:1.9;color:#827a6a;max-wi
 .more-panel button{width:100%;min-height:42px;text-align:left;border:0;background:transparent;border-radius:12px;font-size:13px}
 .more-panel button:hover:not(:disabled){background:#eef0e7}
 .interaction-bar output{flex-basis:100%;min-height:18px}
+.daily-life{flex-basis:100%;margin:-7px 0 0;color:#8b8575;font-size:11px;line-height:1.5}.daily-life[hidden]{display:none}
 .room-note{background:#f9f4eacf;padding:7px 10px;border-radius:9px;letter-spacing:.025em;color:#706b5f}
 .touch-guide{display:none}
 .show-ui{position:absolute;right:20px;top:20px;z-index:5;background:#fffdf6d9;box-shadow:0 4px 18px #42351c30}

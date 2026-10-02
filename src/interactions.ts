@@ -14,6 +14,7 @@ export interface Companion {
   homeZ: number;
   baseX: number;
   baseY: number;
+  supportY: number;
   baseZ: number;
   walkX: number;
   walkZ: number;
@@ -156,13 +157,13 @@ export function createInteractions(scene: Scene, cats: Companion[], camera: ArcR
     if (kind === 'toy') bend(rig, 'front_foot.L', 0, .16 * envelope * Math.sin(time * 6), 0);
     const { packet, heart, toy } = effects[index];
     packet.position.copyFrom(origin).addInPlace(new Vector3(Math.sin(targetYaw), 0, Math.cos(targetYaw)).scale(.73));
-    packet.position.y = .82 + .025 * Math.sin(time * 3); packet.rotation.set(-.4, targetYaw, .15);
+    packet.position.y = origin.y - cat.baseY + .82 + .025 * Math.sin(time * 3); packet.rotation.set(-.4, targetYaw, .15);
     heart.position.copyFrom(cat.root.position).addInPlace(new Vector3(Math.sin(targetYaw), 0, Math.cos(targetYaw)).scale(.53));
     heart.position.y = cat.root.position.y + 1.55 + .12 * envelope;
     heart.visibility = clamp(.45 + envelope * 2, 0, 1);
     toy.position.copyFrom(origin).addInPlace(new Vector3(Math.sin(targetYaw), 0, Math.cos(targetYaw)).scale(.8));
     toy.position.x += .38 * Math.sin(time * 4) * envelope;
-    toy.position.y = .14 + .16 * Math.abs(Math.sin(time * 7)) * envelope;
+    toy.position.y = origin.y - cat.baseY + .14 + .16 * Math.abs(Math.sin(time * 7)) * envelope;
     toy.rotation.y += dt * 5;
   }
   function pause(value: boolean) {

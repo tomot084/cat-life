@@ -1,0 +1,75 @@
+import { chromium } from '@playwright/test';
+import { createServer } from 'node:http';
+import { readFile, mkdir, stat } from 'node:fs/promises';
+import { resolve, extname } from 'node:path';
+import assert from 'node:assert/strict';
+
+const base = process.env.TEST_BASE ?? '/';
+assert(/^\/[A-Za-z0-9_.-]*\/$/.test(base) || base === '/');
+const server = createServer(async (req, res) => {
+  try {
+    const pathname = new URL(req.url, 'http://localhost').pathname;
+    assert(pathname.startsWith(base));
+    const path = resolve('dist', decodeURIComponent(pathname.slice(base.length) || 'index.html'));
+    assert(path.startsWith(resolve('dist') + '/'));
+    assert((await stat(path)).isFile());
+    res.setHeader('Content-Type', ({ '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.glb': 'model/gltf-binary' })[extname(path)] ?? 'application/octet-stream');
+    res.end(await readFile(path));
+  } catch { res.statusCode = 404; res.end('Not found'); }
+});
+await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+const origin = `http://127.0.0.1:${server.address().port}`;
+const browser = await chromium.launch({ headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const errors = [], badResponses = [];
+try {
+  for (const mobile of [false, true]) {
+    const page = await browser.newPage(mobile ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 960, height: 760 } });
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+    page.on('response', response => { if (response.status() >= 400) badResponses.push(`${response.status()} ${response.url()}`); });
+    await page.goto(origin + base);
+    await page.waitForSelector('canvas[data-ready="true"]', { timeout: 90000 });
+    await page.waitForFunction(() => document.querySelector('canvas').dataset.purinActivity === 'wander', null, { timeout: 45000 });
+    if (!mobile && process.env.OBSERVE_DAILY_CYCLE) {
+      await Promise.all([
+        page.waitForFunction(() => document.querySelector('#daily-life').textContent.includes('ぷーたん：ごはん'), null, { timeout: 120000 }),
+        page.waitForFunction(() => document.querySelector('#daily-life').textContent.includes('こころ：ボール遊び'), null, { timeout: 120000 }),
+      ]);
+      await mkdir('artifacts/ambient-life', { recursive: true });
+      await page.screenshot({ path: 'artifacts/ambient-life/desktop-daily-cycle.png', fullPage: true, timeout: 90000 });
+      console.log('desktop: natural eating and ball play observed');
+    }
+    await page.getByRole('button', { name: 'ぷーたん', exact: true }).click();
+    await page.locator('#more-actions summary').click();
+    await page.getByRole('button', { name: 'タワーにのぼる' }).click();
+    await page.waitForFunction(() => document.querySelector('#daily-life').textContent.includes('ぷーたん：タワーの上'), null, { timeout: 90000 });
+    await mkdir('artifacts/ambient-life', { recursive: true });
+    await page.screenshot({ path: `artifacts/ambient-life/${mobile ? 'mobile' : 'desktop'}-tower.png`, fullPage: true, timeout: 90000 });
+    await page.getByRole('button', { name: 'なでる', exact: true }).click();
+    assert((await page.locator('#interaction-status').innerText()).includes('ぷーたんをなでなで'));
+    await page.getByRole('button', { name: '並んでおすわり', exact: true }).click();
+    await page.waitForTimeout(1500);
+    assert.equal(await page.getByRole('button', { name: '並んでおすわり', exact: true }).getAttribute('aria-pressed'), 'true');
+    await page.locator('#more-actions summary').click();
+    await page.getByRole('button', { name: '配置を戻す' }).click();
+    assert((await page.locator('#interaction-status').innerText()).includes('元の場所へ'));
+    if (!mobile) {
+      await page.getByRole('button', { name: '並んでおすわり', exact: true }).click();
+      await page.screenshot({ path: 'artifacts/ambient-life/desktop-before-manual.png', fullPage: true, timeout: 90000 });
+      const box = await page.locator('canvas').boundingBox();
+      await page.mouse.move(box.x + 555, box.y + 250);
+      await page.mouse.down(); await page.waitForTimeout(500);
+      assert((await page.locator('#interaction-status').innerText()).includes('ぷーたんをつかみました'), await page.locator('#interaction-status').innerText());
+      await page.mouse.move(box.x + 555, box.y + 122, { steps: 12 });
+      await page.mouse.up();
+      assert((await page.locator('#interaction-status').innerText()).includes('タワーの上にのせました'));
+      await page.screenshot({ path: 'artifacts/ambient-life/desktop-manual-perch.png', fullPage: true, timeout: 90000 });
+    }
+    await page.close();
+    console.log(`${mobile ? 'mobile' : 'desktop'}: daily walk, tower climb, pet on perch, mode change, reset${mobile ? '' : ', manual tower placement'} passed`);
+  }
+  assert.deepEqual(errors, []); assert.deepEqual(badResponses, []);
+  console.log(`${base}: ambient life passed, console error 0, asset 404 0`);
+} finally {
+  await browser.close(); await new Promise(resolve => server.close(resolve));
+}

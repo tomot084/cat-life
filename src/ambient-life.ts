@@ -1,0 +1,287 @@
+import { Quaternion, Scene, TransformNode, Vector3 } from '@babylonjs/core';
+import type { Companion } from './interactions';
+import { LIFE_SPOTS, planFloorRoute, safeFloorPoint, TOWER_APPROACH, TOWER_PERCH, type FloorPoint } from './placement';
+
+export type DailyActivity = 'rest' | 'wander' | 'sit' | 'doze' | 'eat' | 'drink' | 'ball' | 'tower';
+type Stage = 'manual' | 'wait' | 'walk' | 'act' | 'jump-up' | 'jump-down';
+type JointPose = { node: TransformNode; rotation: Quaternion; scale: Vector3 };
+type Actor = {
+  stage: Stage; activity: DailyActivity; time: number; duration: number; sequence: number;
+  route: FloorPoint[]; waypoint: number; pose?: Map<string, JointPose>;
+  jumpFrom?: Vector3; jumpTo?: Vector3; afterLanding?: () => void; blocked: number;
+};
+const routines: DailyActivity[][] = [
+  ['wander', 'eat', 'tower', 'doze', 'ball', 'drink', 'sit'],
+  ['sit', 'ball', 'drink', 'wander', 'doze', 'tower', 'eat'],
+];
+const labels: Record<DailyActivity, string> = {
+  rest: 'のんびり', wander: 'おさんぽ', sit: 'おすわり', doze: 'うとうと',
+  eat: 'ごはん', drink: 'お水', ball: 'ボール遊び', tower: 'タワーの上',
+};
+const smooth = (t: number) => t * t * (3 - 2 * t);
+const angle = (from: FloorPoint, to: FloorPoint) => Math.atan2(to.x - from.x, to.z - from.z);
+
+export function createAmbientLife(scene: Scene, cats: Companion[],
+  play: (cat: Companion, action: string) => void,
+  onMoved: (index: number, x: number, z: number) => void,
+  onActivity: (index: number, activity: DailyActivity, label: string) => void,
+  isInteracting: (index: number) => boolean) {
+  const actors: Actor[] = cats.map(() => ({ stage: 'manual', activity: 'rest', time: 0,
+    duration: 0, sequence: 0, route: [], waypoint: 0, blocked: 0 }));
+  const ball = scene.getMeshByName('toy-ball'), stripe = scene.getMeshByName('ball-stripe');
+  const ballHome = ball?.position.clone(), stripeHome = stripe?.position.clone();
+  let enabled = false, paused = false, towerOwner = -1, ballOwner = -1;
+  const announce = (index: number, activity: DailyActivity, label = labels[activity]) => onActivity(index, activity, label);
+  const group = (cat: Companion) => cat.groups.find(g => g.name === cat.action)!;
+  function restoreBall(index: number) {
+    if (ballOwner !== index) return;
+    if (ball && ballHome) ball.position.copyFrom(ballHome);
+    if (stripe && stripeHome) stripe.position.copyFrom(stripeHome);
+    ballOwner = -1;
+  }
+  function restorePose(actor: Actor) {
+    if (!actor.pose) return;
+    for (const pose of actor.pose.values()) {
+      pose.node.rotationQuaternion = pose.rotation.clone(); pose.node.scaling.copyFrom(pose.scale);
+    }
+    actor.pose = undefined;
+  }
+  function capturePose(index: number) {
+    const pose = new Map<string, JointPose>();
+    for (const name of ['Head', 'Eye.L', 'Eye.R', 'Ear.L', 'Ear.R', 'TailBase', 'front_foot.L']) {
+      const node = cats[index].nodes.find(n => n.name === name);
+      if (node) pose.set(name, { node, rotation: node.rotationQuaternion?.clone() ?? Quaternion.FromEulerVector(node.rotation), scale: node.scaling.clone() });
+    }
+    actors[index].pose = pose;
+  }
+  function bend(actor: Actor, name: string, yaw = 0, pitch = 0, roll = 0, eye = 1) {
+    const pose = actor.pose?.get(name); if (!pose) return;
+    pose.node.rotationQuaternion = pose.rotation.multiply(Quaternion.RotationYawPitchRoll(yaw, pitch, roll));
+    pose.node.scaling.copyFrom(pose.scale); pose.node.scaling.y *= eye;
+  }
+  function interrupt(index: number) {
+    const actor = actors[index]; restorePose(actor); restoreBall(index);
+    if (actor.stage === 'walk') play(cats[index], 'IdleNorm');
+    actor.stage = 'manual'; actor.time = 0; actor.route = []; actor.waypoint = 0; actor.afterLanding = undefined;
+    if (towerOwner === index && cats[index].supportY < .1 && cats[index].root.position.y < cats[index].baseY + .15) towerOwner = -1;
+  }
+  function wait(index: number, duration: number) {
+    const actor = actors[index]; restorePose(actor); restoreBall(index);
+    actor.stage = 'wait'; actor.activity = 'rest'; actor.time = 0; actor.duration = duration;
+    play(cats[index], 'IdleNorm'); announce(index, 'rest');
+  }
+  function startAct(index: number) {
+    const actor = actors[index], cat = cats[index], activity = actor.activity;
+    actor.time = 0;
+    if (activity === 'tower') { beginJump(index, true); return; }
+    actor.stage = 'act';
+    actor.duration = ({ wander: 2.6, sit: 4.2, doze: 7.5, eat: 4.7, drink: 4.2, ball: 5.2, rest: 2 } as Record<DailyActivity, number>)[activity];
+    play(cat, activity === 'sit' || activity === 'doze' ? 'IdleSit' : 'IdleNorm');
+    if (activity === 'doze' || activity === 'eat' || activity === 'drink' || activity === 'ball') {
+      group(cat).goToFrame(group(cat).from); group(cat).pause(); capturePose(index);
+    }
+    if (activity === 'ball') ballOwner = index;
+    if (activity === 'eat' || activity === 'drink') {
+      const bowl = activity === 'eat' ? { x: 2.78, z: 2.35 } : { x: 3.62, z: 2.35 };
+      cat.root.rotation.y = angle(cat.root.position, bowl);
+    }
+    announce(index, activity);
+  }
+  function startActivity(index: number, activity: DailyActivity) {
+    const actor = actors[index], cat = cats[index]; interrupt(index);
+    actor.activity = activity; actor.time = 0;
+    if (activity === 'sit') { startAct(index); return; }
+    if (activity === 'tower') towerOwner = index;
+    const destination: FloorPoint = activity === 'tower' ? TOWER_APPROACH :
+      activity === 'doze' ? LIFE_SPOTS.bed : activity === 'eat' ? LIFE_SPOTS.food :
+      activity === 'drink' ? LIFE_SPOTS.water : activity === 'ball' ? LIFE_SPOTS.ball :
+      LIFE_SPOTS.wander[(actor.sequence + index) % LIFE_SPOTS.wander.length];
+    const other = cats[1 - index].root.position;
+    actor.route = planFloorRoute(cat.root.position, destination, { x: other.x, z: other.z });
+    actor.waypoint = 0; actor.blocked = 0;
+    if (!actor.route.length) { wait(index, 1.5); return; }
+    actor.stage = 'walk'; play(cat, 'WalkCycle'); announce(index, activity, 'おさんぽ中');
+  }
+  function nextActivity(index: number) {
+    const actor = actors[index], routine = routines[index];
+    for (let attempt = 0; attempt < routine.length; attempt++) {
+      const activity = routine[actor.sequence++ % routine.length];
+      if ((activity === 'tower' && towerOwner >= 0 && towerOwner !== index) ||
+          (activity === 'ball' && ballOwner >= 0 && ballOwner !== index)) continue;
+      startActivity(index, activity); return;
+    }
+    wait(index, 2);
+  }
+  function finish(index: number) {
+    restorePose(actors[index]); restoreBall(index); wait(index, 1.4);
+  }
+  function beginJump(index: number, up: boolean, afterLanding?: () => void) {
+    const actor = actors[index], cat = cats[index]; restorePose(actor);
+    const other = cats[1 - index].root.position;
+    const floor = safeFloorPoint(TOWER_APPROACH.x, TOWER_APPROACH.z, { x: other.x, z: other.z });
+    actor.stage = up ? 'jump-up' : 'jump-down'; actor.time = 0; actor.duration = up ? 1.25 : 1.05;
+    actor.jumpFrom = cat.root.position.clone(); actor.jumpTo = up ?
+      new Vector3(TOWER_PERCH.x, cat.baseY + TOWER_PERCH.y, TOWER_PERCH.z) :
+      new Vector3(floor.x, cat.baseY, floor.z);
+    actor.afterLanding = afterLanding;
+    cat.supportY = 0; play(cat, 'IdleNorm');
+    cat.root.rotation.y = angle(actor.jumpFrom, actor.jumpTo);
+    announce(index, 'tower', up ? 'タワーへジャンプ' : 'タワーからジャンプ');
+  }
+  function tickJump(index: number, dt: number) {
+    const actor = actors[index], cat = cats[index]; actor.time += dt;
+    const t = Math.min(1, actor.time / actor.duration), eased = smooth(t);
+    const start = actor.jumpFrom!, end = actor.jumpTo!;
+    cat.root.position.copyFrom(Vector3.Lerp(start, end, eased));
+    cat.root.position.y += .22 * Math.sin(Math.PI * t);
+    cat.root.rotation.x = -.14 * Math.sin(Math.PI * t);
+    if (t < 1) return;
+    cat.root.position.copyFrom(end); cat.root.rotation.x = 0;
+    if (actor.stage === 'jump-up') {
+      cat.supportY = TOWER_PERCH.y; towerOwner = index;
+      actor.stage = 'act'; actor.activity = 'tower'; actor.time = 0; actor.duration = 8;
+      cat.root.rotation.y = .8; play(cat, 'IdleSit'); announce(index, 'tower');
+    } else {
+      cat.supportY = 0; if (towerOwner === index) towerOwner = -1;
+      onMoved(index, end.x, end.z);
+      const callback = actor.afterLanding; actor.afterLanding = undefined;
+      if (callback) { actor.stage = 'manual'; callback(); } else finish(index);
+    }
+  }
+  function tickWalk(index: number, dt: number) {
+    const actor = actors[index], cat = cats[index];
+    let distanceLeft = dt * .95;
+    while (distanceLeft > 0 && actor.waypoint < actor.route.length) {
+      const target = actor.route[actor.waypoint];
+      const distance = Math.hypot(target.x - cat.root.position.x, target.z - cat.root.position.z);
+      if (distance < .001) { actor.waypoint++; continue; }
+      const portion = Math.min(distanceLeft, distance);
+      const x = cat.root.position.x + (target.x - cat.root.position.x) * portion / distance;
+      const z = cat.root.position.z + (target.z - cat.root.position.z) * portion / distance;
+      const other = cats[1 - index].root.position;
+      if (Math.hypot(x - other.x, z - other.z) < .75) {
+        actor.blocked += dt;
+        if (actor.blocked > 1.5) {
+          actor.route = planFloorRoute(cat.root.position, actor.route.at(-1)!, { x: other.x, z: other.z });
+          actor.waypoint = 0; actor.blocked = 0;
+          if (!actor.route.length) wait(index, 1.5);
+        }
+        return;
+      }
+      actor.blocked = 0; cat.root.rotation.y = angle(cat.root.position, target);
+      cat.root.position.set(x, cat.baseY, z); distanceLeft -= portion;
+      if (portion >= distance - .001) actor.waypoint++;
+    }
+    if (actor.waypoint >= actor.route.length) {
+      onMoved(index, cat.root.position.x, cat.root.position.z); startAct(index);
+    }
+  }
+  function tickAct(index: number, dt: number) {
+    const actor = actors[index]; actor.time += dt;
+    if (actor.pose) {
+      restorePose(actor); capturePose(index);
+      const t = actor.time;
+      if (actor.activity === 'doze') {
+        bend(actor, 'Head', 0, .22 + .025 * Math.sin(t * 1.7), .08);
+        bend(actor, 'Eye.L', 0, 0, 0, .32); bend(actor, 'Eye.R', 0, 0, 0, .32);
+        bend(actor, 'TailBase', 0, 0, .12 * Math.sin(t * 1.5));
+      } else if (actor.activity === 'eat' || actor.activity === 'drink') {
+        bend(actor, 'Head', 0, .28 + .12 * Math.sin(t * 7));
+        bend(actor, 'Ear.L', 0, 0, .03 * Math.sin(t * 5));
+        bend(actor, 'Ear.R', 0, 0, -.03 * Math.sin(t * 5));
+      } else if (actor.activity === 'ball') {
+        bend(actor, 'Head', .12 * Math.sin(t * 4), .07 * Math.sin(t * 6));
+        bend(actor, 'front_foot.L', 0, .28 * Math.max(0, Math.sin(t * 6)));
+        if (ball && stripe && ballHome && stripeHome) {
+          ball.position.copyFrom(ballHome); stripe.position.copyFrom(stripeHome);
+          const dx = .18 * Math.sin(t * 4), dz = .11 * Math.sin(t * 2.5);
+          ball.position.x += dx; ball.position.z += dz;
+          stripe.position.x += dx; stripe.position.z += dz;
+        }
+      }
+    }
+    if (actor.time < actor.duration) return;
+    if (actor.activity === 'tower') beginJump(index, false);
+    else finish(index);
+  }
+  function tick(dt: number) {
+    if (paused) return;
+    cats.forEach((cat, index) => {
+      const actor = actors[index];
+      if (actor.stage === 'manual') {
+        if (enabled && !isInteracting(index)) {
+          actor.time += dt;
+          if (actor.time > 2.2) {
+            if (cat.supportY > .1) {
+              actor.stage = 'act'; actor.activity = 'tower'; actor.time = 0; actor.duration = 4;
+              play(cat, 'IdleSit'); announce(index, 'tower');
+            } else wait(index, .1);
+          }
+        }
+      } else if (actor.stage === 'wait') {
+        actor.time += dt;
+        if (enabled && actor.time >= actor.duration) nextActivity(index);
+      } else if (actor.stage === 'walk') tickWalk(index, dt);
+      else if (actor.stage === 'act') tickAct(index, dt);
+      else tickJump(index, dt);
+    });
+  }
+  function startRelax() {
+    enabled = true; paused = false;
+    cats.forEach((cat, index) => {
+      interrupt(index);
+      if (cat.supportY > .1) {
+        towerOwner = index; actors[index].activity = 'tower'; actors[index].stage = 'act';
+        actors[index].duration = 7; actors[index].time = 0;
+        play(cat, 'IdleSit'); announce(index, 'tower');
+      } else if (cat.root.position.y > cat.baseY + .15) {
+        beginJump(index, false, () => wait(index, 1.5));
+      } else wait(index, index ? 2.8 : 1.2);
+    });
+  }
+  function stopForMode(onGround: (index: number) => void) {
+    enabled = false; paused = false;
+    cats.forEach((cat, index) => {
+      const elevated = cat.supportY > .1 || cat.root.position.y > cat.baseY + .15;
+      interrupt(index);
+      if (elevated) beginJump(index, false, () => onGround(index));
+      else { cat.supportY = 0; cat.root.position.y = cat.baseY; onMoved(index, cat.root.position.x, cat.root.position.z); onGround(index); }
+    });
+  }
+  function placed(index: number) {
+    interrupt(index);
+    const cat = cats[index];
+    if (cat.supportY > .1) {
+      towerOwner = index; actors[index].stage = 'act'; actors[index].activity = 'tower';
+      actors[index].time = 0; actors[index].duration = 8;
+      play(cat, 'IdleSit'); announce(index, 'tower');
+    } else if (enabled) wait(index, 2.2);
+  }
+  function commandTower(index: number): boolean {
+    if (towerOwner >= 0 && towerOwner !== index) return false;
+    if (cats[index].supportY > .1) return true;
+    startActivity(index, 'tower'); return true;
+  }
+  function returnToFloor(index: number, done: () => void) {
+    const cat = cats[index]; interrupt(index);
+    if (cat.supportY > .1 || cat.root.position.y > cat.baseY + .15) beginJump(index, false, done);
+    else done();
+  }
+  function resetImmediate() {
+    enabled = false; paused = false;
+    cats.forEach((cat, index) => {
+      interrupt(index); cat.supportY = 0; cat.root.position.y = cat.baseY; cat.root.rotation.x = 0;
+    });
+    towerOwner = -1; ballOwner = -1;
+  }
+  function pause(value: boolean) {
+    paused = value;
+    if (!value) actors.forEach((actor, index) => {
+      if (actor.pose) group(cats[index]).pause();
+    });
+  }
+  return { tick, startRelax, stopForMode, interrupt, placed, commandTower, returnToFloor,
+    resetImmediate, pause, canPerch: (index: number) => towerOwner < 0 || towerOwner === index,
+    isTransitioning: (index: number) => actors[index].stage === 'jump-up' || actors[index].stage === 'jump-down',
+    isEnabled: () => enabled };
+}

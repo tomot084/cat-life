@@ -1,11 +1,13 @@
 import { ArcRotateCamera, Matrix, Scene } from '@babylonjs/core';
 import type { Companion } from './interactions';
+import { TOWER_PERCH } from './placement';
 
 type PointerState = { x: number; y: number; startX: number; startY: number; cat: number; moved: boolean };
 type ControlEvents = {
   select: (index: number) => void;
   grab: (index: number) => void;
-  move: (index: number, x: number, z: number) => void;
+  canPerch: (index: number) => boolean;
+  move: (index: number, x: number, z: number, surface: 'floor' | 'tower') => void;
   drop: (index: number) => void;
 };
 const clamp = (v: number, low: number, high: number) => Math.max(low, Math.min(high, v));
@@ -28,10 +30,10 @@ export function attachRoomControls(canvas: HTMLCanvasElement, scene: Scene, came
     const hit = scene.pick(x, y, mesh => cats.some(cat => cat.meshes.includes(mesh)));
     return cats.findIndex(cat => cat.meshes.includes(hit?.pickedMesh!));
   }
-  function floorPoint(x: number, y: number) {
+  function floorPoint(x: number, y: number, height = 0) {
     const ray = scene.createPickingRay(x, y, Matrix.Identity(), camera);
     if (ray.direction.y >= -.001) return undefined;
-    const distance = -ray.origin.y / ray.direction.y;
+    const distance = (height - ray.origin.y) / ray.direction.y;
     if (distance < 0) return undefined;
     return ray.origin.add(ray.direction.scale(distance));
   }
@@ -52,7 +54,7 @@ export function attachRoomControls(canvas: HTMLCanvasElement, scene: Scene, came
         const state = pointers.get(event.pointerId);
         if (!state || state.moved || pointers.size !== 1) return;
         grabbed = cat;
-        const ground = floorPoint(state.x, state.y);
+        const ground = floorPoint(state.x, state.y, Math.max(0, cats[cat].root.position.y - cats[cat].baseY));
         grabOffsetX = ground ? cats[cat].root.position.x - ground.x : 0;
         grabOffsetZ = ground ? cats[cat].root.position.z - ground.z : 0;
         events.select(cat); events.grab(cat);
@@ -75,8 +77,12 @@ export function attachRoomControls(canvas: HTMLCanvasElement, scene: Scene, came
       pinchDistance = distance; return;
     }
     if (grabbed >= 0) {
+      const perch = floorPoint(point.x, point.y, TOWER_PERCH.y);
+      if (perch && Math.hypot(perch.x - TOWER_PERCH.x, perch.z - TOWER_PERCH.z) < TOWER_PERCH.dropRadius && events.canPerch(grabbed)) {
+        events.move(grabbed, TOWER_PERCH.x, TOWER_PERCH.z, 'tower'); return;
+      }
       const floor = floorPoint(point.x, point.y);
-      if (floor) events.move(grabbed, floor.x + grabOffsetX, floor.z + grabOffsetZ);
+      if (floor) events.move(grabbed, floor.x + grabOffsetX, floor.z + grabOffsetZ, 'floor');
       return;
     }
     if (Math.hypot(point.x - state.startX, point.y - state.startY) > 7) {
