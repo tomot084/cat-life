@@ -9,7 +9,8 @@ type Actor = {
   stage: Stage; activity: DailyActivity; time: number; duration: number; sequence: number;
   route: FloorPoint[]; waypoint: number; pose?: Map<string, JointPose>;
   actOrigin?: Vector3;
-  jumpFrom?: Vector3; jumpTo?: Vector3; afterLanding?: () => void; blocked: number;
+  jumpFrom?: Vector3; jumpTo?: Vector3; jumpPrep?: number;
+  afterLanding?: () => void; blocked: number;
 };
 const routines: DailyActivity[][] = [
   ['wander', 'eat', 'tower', 'doze', 'ball', 'drink', 'sit'],
@@ -20,6 +21,11 @@ const labels: Record<DailyActivity, string> = {
   eat: 'ごはん', drink: 'お水', ball: 'ボール遊び', tower: 'タワーの上',
 };
 const smooth = (t: number) => t * t * (3 - 2 * t);
+const unit = (t: number) => Math.max(0, Math.min(1, t));
+const ease = (t: number) => smooth(unit(t));
+const mix = (a: number, b: number, t: number) => a + (b - a) * t;
+const cubic = (a: number, b: number, c: number, d: number, t: number) =>
+  a * (1 - t) ** 3 + 3 * b * (1 - t) ** 2 * t + 3 * c * (1 - t) * t ** 2 + d * t ** 3;
 const angle = (from: FloorPoint, to: FloorPoint) => Math.atan2(to.x - from.x, to.z - from.z);
 
 export function createAmbientLife(scene: Scene, cats: Companion[],
@@ -69,9 +75,10 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
   function capturePose(index: number) {
     const pose = new Map<string, JointPose>();
     for (const name of ['spine.008', 'spine.009', 'spine.010', 'Head', 'Eye.L', 'Eye.R',
-      'Ear.L', 'Ear.R', 'TailBase', 'shoulder.L', 'shoulder.R',
+      'Ear.L', 'Ear.R', 'TailBase', 'Tail2', 'Tail3', 'shoulder.L', 'shoulder.R',
       'front_thigh.L', 'front_thigh.R', 'front_shin.L', 'front_shin.R',
-      'front_foot.L', 'front_foot.R']) {
+      'front_foot.L', 'front_foot.R', 'pelvis.L', 'pelvis.R',
+      'thigh.L', 'thigh.R', 'shin.L', 'shin.R', 'foot.L', 'foot.R']) {
       const node = cats[index].nodes.find(n => n.name === name);
       if (node) pose.set(name, { node, rotation: node.rotationQuaternion?.clone() ?? Quaternion.FromEulerVector(node.rotation), scale: node.scaling.clone() });
     }
@@ -146,25 +153,68 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     const actor = actors[index], cat = cats[index]; restorePose(actor);
     const other = cats[1 - index].root.position;
     const floor = safeFloorPoint(TOWER_APPROACH.x, TOWER_APPROACH.z, { x: other.x, z: other.z });
-    actor.stage = up ? 'jump-up' : 'jump-down'; actor.time = 0; actor.duration = up ? 1.25 : 1.05;
+    actor.stage = up ? 'jump-up' : 'jump-down'; actor.time = 0; actor.duration = up ? 1.55 : 1.3;
+    actor.jumpPrep = up ? .23 : Math.abs(cat.root.position.y - cat.baseY - TOWER_PERCH.y) < .15 ? .18 : 0;
     actor.jumpFrom = cat.root.position.clone(); actor.jumpTo = up ?
       new Vector3(TOWER_PERCH.x, cat.baseY + TOWER_PERCH.y, TOWER_PERCH.z) :
       new Vector3(floor.x, cat.baseY, floor.z);
     actor.afterLanding = afterLanding;
-    cat.supportY = 0; play(cat, 'IdleNorm');
+    if (up) cat.supportY = 0;
+    play(cat, 'IdleNorm'); group(cat).goToFrame(group(cat).from); group(cat).pause(); capturePose(index);
     cat.root.rotation.y = angle(actor.jumpFrom, actor.jumpTo);
     announce(index, 'tower', up ? 'タワーへジャンプ' : 'タワーからジャンプ');
   }
   function tickJump(index: number, dt: number) {
     const actor = actors[index], cat = cats[index]; actor.time += dt;
-    const t = Math.min(1, actor.time / actor.duration), eased = smooth(t);
+    restorePose(actor); capturePose(index);
+    const up = actor.stage === 'jump-up';
+    // Separate the planted crouch, airborne travel, and landing recovery.
+    const prep = actor.jumpPrep ?? 0, settle = .22, flightEnd = actor.duration - settle;
+    const p = unit((actor.time - prep) / (flightEnd - prep));
+    const landing = unit((actor.time - flightEnd) / settle);
+    const coil = actor.time < prep ? ease(actor.time / prep) : 1 - ease(p / .18);
+    const stretch = ease(p / .14) * (1 - ease((p - .42) / .2));
+    const tuck = ease((p - .2) / .25) * (1 - ease((p - .72) / .18));
+    const reach = ease((p - .48) / .29) * (1 - ease((p - .97) / .03));
+    const absorb = actor.time >= flightEnd ? Math.sin(Math.PI * landing) : 0;
     const start = actor.jumpFrom!, end = actor.jumpTo!;
-    cat.root.position.copyFrom(Vector3.Lerp(start, end, eased));
-    cat.root.position.y += .22 * Math.sin(Math.PI * t);
-    cat.root.rotation.x = -.14 * Math.sin(Math.PI * t);
-    if (t < 1) return;
-    cat.root.position.copyFrom(end); cat.root.rotation.x = 0;
-    if (actor.stage === 'jump-up') {
+    if (actor.time < prep) {
+      cat.root.position.copyFrom(start);
+      cat.root.position.y -= (up ? .085 : .045) * coil;
+    } else if (actor.time < flightEnd) {
+      const travel = ease(p), launchY = start.y - (up ? .085 : .045) * (prep > 0 ? 1 : 0);
+      cat.root.position.x = mix(start.x, end.x, travel);
+      cat.root.position.z = mix(start.z, end.z, travel);
+      // The asymmetric arcs lift toward the perch and drop away from its edge.
+      cat.root.position.y = up
+        ? cubic(launchY, launchY + 1.7, end.y + .52, end.y, p)
+        : cubic(launchY, launchY + .12, end.y + .58, end.y, p);
+    } else cat.root.position.copyFrom(end);
+    cat.root.rotation.x = up ? -.13 * stretch + .07 * reach + .045 * absorb
+      : .12 * stretch - .055 * tuck + .045 * absorb;
+    const look = up ? -.16 * coil - .1 * stretch + .08 * reach : .2 * coil + .1 * stretch + .06 * reach;
+    bend(actor, 'spine.009', 0, .08 * coil - .05 * stretch + .05 * absorb);
+    bend(actor, 'spine.010', 0, .05 * coil - .08 * stretch + .06 * absorb);
+    bend(actor, 'Head', 0, look + .07 * absorb);
+    for (const side of ['L', 'R']) {
+      bend(actor, `shoulder.${side}`, 0, -.06 * stretch + .04 * absorb);
+      bend(actor, `front_thigh.${side}`, 0, .18 * coil + .46 * stretch + .2 * tuck + .36 * reach - .12 * absorb);
+      bend(actor, `front_shin.${side}`, 0, -.24 * coil - .16 * stretch - .3 * tuck + .04 * reach + .22 * absorb);
+      bend(actor, `front_foot.${side}`, 0, .1 * coil + .14 * stretch + .1 * reach - .09 * absorb);
+      bend(actor, `thigh.${side}`, 0, -.25 * coil + .39 * stretch - .25 * tuck - .09 * reach - .1 * absorb);
+      bend(actor, `shin.${side}`, 0, .36 * coil - .25 * stretch + .38 * tuck + .16 * reach + .27 * absorb);
+      bend(actor, `foot.${side}`, 0, -.12 * coil + .12 * stretch - .09 * absorb);
+    }
+    bend(actor, 'TailBase', 0, -.12 * stretch + .13 * reach, .12 * Math.sin(actor.time * 6) * (stretch + tuck));
+    bend(actor, 'Tail2', 0, -.08 * stretch + .11 * reach, .1 * Math.sin(actor.time * 6 - .6) * (stretch + tuck));
+    bend(actor, 'Tail3', 0, 0, .07 * Math.sin(actor.time * 6 - 1.1) * (stretch + tuck));
+    if (up && actor.time >= flightEnd) {
+      const facing = angle(start, end), difference = Math.atan2(Math.sin(.8 - facing), Math.cos(.8 - facing));
+      cat.root.rotation.y = facing + difference * ease((landing - .1) / .9);
+    }
+    if (actor.time < actor.duration) return;
+    restorePose(actor); cat.root.position.copyFrom(end); cat.root.rotation.x = 0;
+    if (up) {
       cat.supportY = TOWER_PERCH.y; towerOwner = index;
       actor.stage = 'act'; actor.activity = 'tower'; actor.time = 0; actor.duration = 8;
       cat.root.rotation.y = .8; play(cat, 'IdleSit'); announce(index, 'tower');
