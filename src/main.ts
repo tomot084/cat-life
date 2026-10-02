@@ -233,6 +233,7 @@ import './production.css';
       const cat = cats[index];
       if (surface === 'tower') {
         cat.supportY = TOWER_PERCH.y;
+        cat.root.rotation.y = Math.PI / 2;
         carry.move(TOWER_PERCH.x, TOWER_PERCH.z, cat.supportY);
       } else {
         const other = cats[1 - index].root.position;

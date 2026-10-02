@@ -37,12 +37,16 @@
   },
   "cat-tree": {
     "file": "src/assets/room/cat-tree.glb",
-    "author": "Pat Siefring",
-    "source": "https://poly.pizza/m/daMM0nomcTL",
-    "license": "CC-BY-3.0",
-    "sha256": "bdb30c80512671e9d97c581bdb3dc525f9e76a148885e03e52c1648a8947e267",
-    "bytes": 39244,
-    "triangles": 572
+    "author": "Connor Adams",
+    "source": "https://www.printables.com/model/591975-dollhouse-cat-furniture",
+    "license": "Public-Domain",
+    "sha256": "dfba4d7bd1a13551a329c9c7b6a49d770305fe68c5f7577fbfcb670924854c57",
+    "bytes": 138620,
+    "triangles": 7540,
+    "originalFile": "condo-cat-tree.stl",
+    "modifications": "STL to GLB, Z-up to Y-up, centered, oatmeal material",
+    "originalSha256": "325e98099b2b5e9d3d1a736baf119c9667c1de7b9955c96c3a44f5ca212f0d8f",
+    "sourceLicenseName": "Creative Commons \u2014 Public Domain"
   },
   "cat-bed": {
     "file": "src/assets/room/cat-bed.glb",
@@ -53,5 +57,31 @@
     "sha256": "1a09bb8e1d8c136e38cdb5ceb9a54e2f5c09cf8c0b40a486cb8dfd25786b2031",
     "bytes": 42356,
     "triangles": 832
+  },
+  "cat-perch": {
+    "file": "src/assets/room/cat-perch.glb",
+    "author": "Connor Adams",
+    "source": "https://www.printables.com/model/591975-dollhouse-cat-furniture",
+    "license": "Public-Domain",
+    "sha256": "f65dfdb2e4354dd7df73fbf6774dfd3cb64713d7d78a5f2ad67e4befeac1d369",
+    "bytes": 181000,
+    "triangles": 10000,
+    "originalFile": "catperch.stl",
+    "modifications": "STL to GLB, Z-up to Y-up, centered, oatmeal material, simplified",
+    "originalSha256": "f99e8c891aa776df8685be445c62235e3f9e55031300558a0bc21192d23e2a8e",
+    "sourceLicenseName": "Creative Commons \u2014 Public Domain"
+  },
+  "cat-scratcher": {
+    "file": "src/assets/room/cat-scratcher.glb",
+    "author": "Connor Adams",
+    "source": "https://www.printables.com/model/591975-dollhouse-cat-furniture",
+    "license": "Public-Domain",
+    "sha256": "b48be26251ac64c84f18fdb5f6eef0a80359a5415fdfaaf8e046dd476295542e",
+    "bytes": 216740,
+    "triangles": 12000,
+    "originalFile": "catscratcher.stl",
+    "modifications": "STL to GLB, Z-up to Y-up, centered, oatmeal material, simplified",
+    "originalSha256": "151cf2eacda120b0261f9dbdf23a2706bdd1777a6e8a6425b576b7d7e86a59c1",
+    "sourceLicenseName": "Creative Commons \u2014 Public Domain"
   }
 }

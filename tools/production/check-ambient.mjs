@@ -70,7 +70,7 @@ try {
       await page.mouse.move(box.x + 555, box.y + 250);
       await page.mouse.down(); await page.waitForTimeout(500);
       assert((await page.locator('#interaction-status').innerText()).includes('ぷーたんをつかみました'), await page.locator('#interaction-status').innerText());
-      await page.mouse.move(box.x + 570, box.y + 151, { steps: 12 });
+      await page.mouse.move(box.x + 570, box.y + 84, { steps: 12 });
       await page.mouse.up();
       assert((await page.locator('#interaction-status').innerText()).includes('タワーの上にのせました'));
       await page.screenshot({ path: 'artifacts/ambient-life/desktop-manual-perch.png', fullPage: true, timeout: 90000 });
@@ -83,7 +83,7 @@ try {
       await touch('touchStart', [[box.x + 160, box.y + 230, 1]]);
       await page.waitForTimeout(600);
       assert((await page.locator('#interaction-status').innerText()).includes('つかみました'));
-      await touch('touchMove', [[box.x + 270, box.y + 160, 1]]);
+      await touch('touchMove', [[box.x + 250, box.y + 112, 1]]);
       await page.waitForTimeout(250);
       await touch('touchEnd', []);
       assert((await page.locator('#interaction-status').innerText()).includes('タワーの上にのせました'));

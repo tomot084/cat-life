@@ -54,7 +54,7 @@ baseはoriginまたはActionsのGITHUB_REPOSITORYから取得します。公開�
 
 | 素材 | 作者・元URL | ライセンス |
 |---|---|---|
-| Cat Tree | [Pat Siefring / Poly Pizza](https://poly.pizza/m/daMM0nomcTL) | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) |
+| Cat Tree / Cat Perch / Cat Scratcher | [Connor Adams / Printables](https://www.printables.com/model/591975-dollhouse-cat-furniture) | Public Domain |
 | Cushion Bed | [3D Assets (@3dassets)](https://3dassets.dev/assets/companion-animals-and-pet-home-cushion-bed-27a23ea4) | CC0 1.0 |
 | bookcaseOpenLow / books / pillow / plantSmall1 | [Kenney / Furniture Kit](https://kenney.nl/assets/furniture-kit) | CC0 1.0 |
 
@@ -62,6 +62,6 @@ baseはoriginまたはActionsのGITHUB_REPOSITORYから取得します。公開�
 
 追加6 GLBは合計113,252 bytes、1,802三角形。Cat Treeだけに小さな埋め込み色テクスチャがあり、外部bufferなし。許可リストとSHA-256は `config/production-room-assets.json`。部屋の木目・布・影・ハートはコードで生成します。実行時に外部CDNへアクセスしません。
 
-`npm run build` は猫2点と小物6点をhash・形式・Creditsと照合し、未知のGLBやZIP、許可外の画像、source map、symlink、private情報を拒否します。`npm run test:production` はdistだけを配信して三モード・二匹のふれあい・キャンセル・連打・停止再開・視点・モバイル画面・通信を検証します。`npm run test:controls` はタップ、長押し移動、回転、ピンチ、追加アクションのPC/スマホ操作を検証します。
+`npm run build` は猫2点と小物8点をhash・形式・Creditsと照合し、未知のGLBやZIP、許可外の画像、source map、symlink、private情報を拒否します。`npm run test:production` はdistだけを配信して三モード・二匹のふれあい・キャンセル・連打・停止再開・視点・モバイル画面・通信を検証します。`npm run test:controls` はタップ、長押し移動、回転、ピンチ、追加アクションのPC/スマホ操作を検証します。
 
 写真・制作途中素材・秘密情報は本リポジトリと公開サイトに含めません。監査の元ZIPとスクリーンショットもdistへコピーしません。

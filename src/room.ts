@@ -1,5 +1,7 @@
 import { Color3, DynamicTexture, ImportMeshAsync, Mesh, MeshBuilder, PBRMaterial, Ray, Scene, ShadowGenerator, StandardMaterial, TransformNode, Vector3 } from '@babylonjs/core';
 import treeUrl from './assets/room/cat-tree.glb?url';
+import perchUrl from './assets/room/cat-perch.glb?url';
+import scratcherUrl from './assets/room/cat-scratcher.glb?url';
 import bedUrl from './assets/room/cat-bed.glb?url';
 import shelfUrl from './assets/room/bookcaseOpenLow.glb?url';
 import booksUrl from './assets/room/books.glb?url';
@@ -134,15 +136,19 @@ export async function createRoom(scene: Scene, shadows: ShadowGenerator): Promis
     }
     return placement;
   }
-  const tree = await prop(treeUrl, 'cat-tree', 2.7, [-3.05, 0, -2.25], 0);
-  const upperDeck = tree.getChildMeshes(false).find(mesh => mesh.name.includes('pPlane2'));
-  if (!upperDeck) throw new Error('Cat tree upper deck is missing');
-  upperDeck.isPickable = true;
-  upperDeck.metadata = { catLanding: 'tower' };
-  upperDeck.computeWorldMatrix(true);
-  const landing = scene.pickWithRay(new Ray(new Vector3(TOWER_PERCH.x, 3, TOWER_PERCH.z), new Vector3(0, -1, 0)), mesh => mesh === upperDeck);
-  if (!landing?.hit || !landing.pickedPoint || Math.abs(landing.pickedPoint.y - TOWER_PERCH.y) > .04)
-    throw new Error(`Cat tree landing does not match its visible surface: ${landing?.pickedPoint?.y}; ${upperDeck.name}; ${upperDeck.getBoundingInfo().boundingBox.minimumWorld.toString()} ${upperDeck.getBoundingInfo().boundingBox.maximumWorld.toString()}`);
+  const tree = await prop(treeUrl, 'cat-tree', 2.7, [-3.05, 0, -2.25]);
+  // Widen the source furniture for the cats' paw spread; keep its original height.
+  tree.scaling.set(1.4, 1, 1.4);
+  const treeMeshes = tree.getChildMeshes(false);
+  for (const mesh of treeMeshes) {
+    mesh.isPickable = true; mesh.metadata = { catLanding: 'tower' };
+    mesh.computeWorldMatrix(true);
+  }
+  const landing = scene.pickWithRay(new Ray(new Vector3(TOWER_PERCH.x, 4, TOWER_PERCH.z), new Vector3(0, -1, 0)), mesh => treeMeshes.includes(mesh));
+  if (!landing?.hit || !landing.pickedPoint || Math.abs(landing.pickedPoint.y - TOWER_PERCH.y) > .015)
+    throw new Error(`Cat tree landing does not match its visible surface: ${landing?.pickedPoint?.y}`);
+  await prop(perchUrl, 'round-cat-bed', 1.15, [3.85, .015, -1.65]);
+  await prop(scratcherUrl, 'cat-scratcher', .32, [-3.15, .015, .1], Math.PI / 2);
   await prop(bedUrl, 'cat-bed', .43, [3.15, .015, -.45]);
   await prop(shelfUrl, 'bookcase', 1.1, [2.85, 0, -2.97]);
   await prop(booksUrl, 'books', .33, [2.6, 1.1, -2.93], -.1);
@@ -163,8 +169,6 @@ export async function createRoom(scene: Scene, shadows: ShadowGenerator): Promis
       bit.scaling.y = .65;
     }
   }
-  box('scratch-pad', [.65, .1, 1.25], [-3.15, .06, .1], rope);
-  for (let i = 0; i < 22; i++) box('scratch-ridge', [.57, .009, .014], [-3.15, .115, -.47 + i * .054], ceramic, false);
   const ball = finish(MeshBuilder.CreateSphere('toy-ball', { diameter: .24, segments: 16 }, scene), [-1.7, .13, 2.03], peach);
   const stripe = finish(MeshBuilder.CreateTorus('ball-stripe', { diameter: .237, thickness: .018, tessellation: 24 }, scene), [-1.7, .13, 2.03], ceramic, false);
   stripe.rotation.z = .7; ball.rotation.z = .7;
@@ -184,9 +188,6 @@ export async function createRoom(scene: Scene, shadows: ShadowGenerator): Promis
   }
   const tunnelBody = finish(MeshBuilder.CreateCylinder('play-tunnel', { diameter: .68, height: .56, tessellation: 20, cap: 0 }, scene), [-3.42, .38, 1.73], tunnelInside);
   tunnelBody.rotation.x = Math.PI / 2;
-  box('play-box-base', [.66, .035, .62], [3.82, .018, 1.12], rope);
-  for (const x of [3.5, 4.14]) box('play-box-side', [.035, .38, .62], [x, .2, 1.12], rope);
-  for (const z of [.82, 1.42]) box('play-box-side', [.62, .38, .035], [3.82, .2, z], rope);
   const mouse = finish(MeshBuilder.CreateSphere('felt-mouse', { diameter: .18, segments: 12 }, scene), [-2.56, .095, .82], cushion);
   mouse.scaling.set(1.25, .68, .75);
   for (const x of [-2.61, -2.51]) finish(MeshBuilder.CreateSphere('mouse-ear', { diameter: .08, segments: 8 }, scene), [x, .19, .83], peach);

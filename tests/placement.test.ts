@@ -8,7 +8,7 @@ test('dragged cats remain on floor and outside furniture', () => {
     const p = safeFloorPoint(x, z, other);
     assert(p.x >= -3.82 && p.x <= 3.82 && p.z >= -2.82 && p.z <= 2.82);
     assert(Math.hypot(p.x - other.x, p.z - other.z) >= .88);
-    for (const [cx, cz, radius] of [[-3.05, -2.25, 1], [3.15, -.45, 1.05], [2.85, -2.97, 1], [3.2, 2.35, .68], [-3.15, .1, .75]]) {
+    for (const [cx, cz, radius] of [[-3.05, -2.25, 1.45], [3.15, -.45, 1.05], [3.85, -1.65, .65], [2.85, -2.97, 1], [3.2, 2.35, .68], [-3.15, .1, .75]]) {
       assert(Math.hypot(p.x - cx, p.z - cz) >= radius, `${x}, ${z} overlapped furniture`);
     }
   }

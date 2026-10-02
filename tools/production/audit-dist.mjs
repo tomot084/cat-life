@@ -11,7 +11,7 @@ for (const [kind, manifest] of [['cat', cats], ['room', props]]) {
     assert.equal(hash(await readFile(item.file)), item.sha256, `Source changed: ${name}`);
     assert(!approved.has(item.sha256), `Duplicate approval: ${name}`);
     if (kind === 'room') {
-      assert(['CC0-1.0', 'CC-BY-3.0'].includes(item.license));
+      assert(['CC0-1.0', 'CC-BY-3.0', 'Public-Domain'].includes(item.license));
       assert(item.author && item.source.startsWith('https://'));
     }
     approved.set(item.sha256, { name, kind, ...item });
@@ -38,16 +38,8 @@ async function scan(dir) {
       assert.equal(bytes.readUInt32LE(4), 2);
       assert.equal(bytes.readUInt32LE(8), bytes.length);
       const gltf = JSON.parse(bytes.subarray(20, 20 + bytes.readUInt32LE(12)));
-      if (item.name === 'cat-tree') {
-        assert.equal(gltf.images?.length, 1);
-        assert.equal(gltf.textures?.length, 1);
-        assert.equal(gltf.images[0].mimeType, 'image/png');
-        assert(!gltf.images[0].uri);
-        assert(gltf.bufferViews[gltf.images[0].bufferView].byteLength <= 128);
-      } else {
-        assert.equal(gltf.images?.length ?? 0, 0, 'Approved assets contain no images');
-        assert.equal(gltf.textures?.length ?? 0, 0);
-      }
+      assert.equal(gltf.images?.length ?? 0, 0, 'Approved assets contain no images');
+      assert.equal(gltf.textures?.length ?? 0, 0);
       assert(gltf.buffers.every(b => !b.uri), 'No external buffer URI');
       assert(!privateMarker.test(JSON.stringify(gltf)) && !/file:\/|\/home\//i.test(JSON.stringify(gltf)));
       if (item.kind === 'cat') {
@@ -68,7 +60,7 @@ async function scan(dir) {
       const text = bytes.toString('utf8');
       assert(!privateMarker.test(text), `Private content marker: ${rel}`);
       if (rel === 'index.html') {
-        for (const credit of ['DreamNoms', '783fcb78b55b4394a212c2b6392e1113', 'creativecommons.org/licenses/by/4.0/', '改変', 'Kenney', '3D Assets', 'Pat Siefring', 'creativecommons.org/licenses/by/3.0/', 'creativecommons.org/publicdomain/zero/1.0/', ...Object.values(props).map(p => p.source)]) {
+        for (const credit of ['DreamNoms', '783fcb78b55b4394a212c2b6392e1113', 'creativecommons.org/licenses/by/4.0/', '改変', 'Kenney', '3D Assets', 'Connor Adams', 'creativecommons.org/publicdomain/zero/1.0/', ...Object.values(props).map(p => p.source)]) {
           assert(text.includes(credit), `Missing credit: ${credit}`);
         }
       }

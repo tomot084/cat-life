@@ -237,7 +237,7 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     bend(actor, 'Tail2', 0, -.08 * stretch + .11 * reach, .1 * Math.sin(actor.time * 6 - .6) * (stretch + tuck));
     bend(actor, 'Tail3', 0, 0, .07 * Math.sin(actor.time * 6 - 1.1) * (stretch + tuck));
     if (up && actor.time >= flightEnd) {
-      const facing = angle(start, end), restYaw = actor.activity === 'window' ? 2.65 : .8;
+      const facing = angle(start, end), restYaw = actor.activity === 'window' ? 2.65 : Math.PI / 2;
       const difference = Math.atan2(Math.sin(restYaw - facing), Math.cos(restYaw - facing));
       cat.root.rotation.y = facing + difference * ease((landing - .1) / .9);
     }
@@ -247,7 +247,7 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
       cat.supportY = actor.activity === 'window' ? WINDOW_PERCH.y : TOWER_PERCH.y;
       if (actor.activity === 'window') windowOwner = index; else towerOwner = index;
       actor.stage = 'act'; actor.time = 0; actor.duration = actor.activity === 'window' ? 9 : 8;
-      cat.root.rotation.y = actor.activity === 'window' ? 2.65 : .8;
+      cat.root.rotation.y = actor.activity === 'window' ? 2.65 : Math.PI / 2;
       play(cat, 'IdleSit'); announce(index, actor.activity);
     } else {
       cat.supportY = 0;

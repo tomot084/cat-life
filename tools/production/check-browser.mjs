@@ -87,8 +87,8 @@ try {
   assert.equal(stopped, await frame(), 'Reset must restore camera');
   await page.locator('footer summary').click();
   const credits = await page.locator('footer').innerText();
-  for (const name of ['DreamNoms', 'Kenney', '3D Assets', 'Pat Siefring', 'Cat Tree', 'Cushion Bed', 'CC0 1.0', 'CC BY 3.0', 'CC BY 4.0', 'bookcaseOpenLow', 'books', 'pillow', 'plantSmall1']) assert(credits.includes(name));
-  assert.equal(new Set(requests.filter(u => u.endsWith('.glb'))).size, 8);
+  for (const name of ['DreamNoms', 'Kenney', '3D Assets', 'Connor Adams', 'Dollhouse Cat Furniture', 'Cushion Bed', 'CC0 1.0', 'Public Domain', 'CC BY 4.0', 'bookcaseOpenLow', 'books', 'pillow', 'plantSmall1']) assert(credits.includes(name));
+  assert.equal(new Set(requests.filter(u => u.endsWith('.glb'))).size, 10);
   await page.close();
 
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
@@ -103,5 +103,5 @@ try {
   assert.equal(errors.length, 0, JSON.stringify(errors));
   assert.equal(badResponses.length, 0, JSON.stringify(badResponses));
   await writeFile(`${out}/${label}-browser.json`, JSON.stringify({ passed: true, base, readyMs, modes, interactions, rapidRepeat: true, cancelOnModeChange: true, completion: true, pauseReaction: true, drag: true, zoom: true, reset: true, mobile: true, errors, warnings, badResponses, requests: [...new Set(requests.map(u => u.replace(origin, '')))] }, null, 2));
-  console.log(`${base}: 8 models, 3 modes, both interactions × both cats × all modes, pause/resume, drag, zoom, reset, credits, mobile; zero errors/404 passed`);
+  console.log(`${base}: 10 models, 3 modes, both interactions × both cats × all modes, pause/resume, drag, zoom, reset, credits, mobile; zero errors/404 passed`);
 } finally { await browser?.close(); await new Promise(r => server.close(r)); }

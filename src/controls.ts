@@ -1,4 +1,5 @@
 import { ArcRotateCamera, Matrix, Scene } from '@babylonjs/core';
+import { TOWER_PERCH } from './placement';
 import type { Companion } from './interactions';
 
 type PointerState = { x: number; y: number; startX: number; startY: number; cat: number; moved: boolean };
@@ -77,7 +78,7 @@ export function attachRoomControls(canvas: HTMLCanvasElement, scene: Scene, came
     }
     if (grabbed >= 0) {
       const perch = scene.pick(point.x, point.y, mesh => mesh.metadata?.catLanding === 'tower');
-      if (perch?.hit && events.canPerch(grabbed)) {
+      if (perch?.hit && Math.abs(perch.pickedPoint!.y - TOWER_PERCH.y) < .035 && events.canPerch(grabbed)) {
         events.move(grabbed, perch.pickedPoint!.x, perch.pickedPoint!.z, 'tower'); return;
       }
       const floor = floorPoint(point.x, point.y);
