@@ -1,8 +1,8 @@
 import { Color3, MeshBuilder, Quaternion, Scene, StandardMaterial, TransformNode, Vector3 } from '@babylonjs/core';
 import type { Companion } from './interactions';
-import { LIFE_SPOTS, planFloorRoute, safeFloorPoint, TOWER_APPROACH, TOWER_PERCH, type FloorPoint } from './placement';
+import { LIFE_SPOTS, planFloorRoute, safeFloorPoint, TOWER_APPROACH, TOWER_PERCH, TOWER_STEP, WINDOW_APPROACH, WINDOW_PERCH, type FloorPoint } from './placement';
 
-export type DailyActivity = 'rest' | 'wander' | 'sit' | 'doze' | 'eat' | 'drink' | 'ball' | 'tower';
+export type DailyActivity = 'rest' | 'wander' | 'sit' | 'doze' | 'eat' | 'drink' | 'ball' | 'mouse' | 'tower' | 'window';
 type Stage = 'manual' | 'wait' | 'walk' | 'act' | 'jump-up' | 'jump-down';
 type JointPose = { node: TransformNode; rotation: Quaternion; scale: Vector3 };
 type Actor = {
@@ -10,15 +10,16 @@ type Actor = {
   route: FloorPoint[]; waypoint: number; pose?: Map<string, JointPose>;
   actOrigin?: Vector3;
   jumpFrom?: Vector3; jumpTo?: Vector3; jumpPrep?: number;
+  jumpStep?: number;
   afterLanding?: () => void; blocked: number;
 };
 const routines: DailyActivity[][] = [
-  ['wander', 'eat', 'tower', 'doze', 'ball', 'drink', 'sit'],
-  ['sit', 'ball', 'drink', 'wander', 'doze', 'tower', 'eat'],
+  ['wander', 'eat', 'tower', 'doze', 'ball', 'drink', 'window', 'mouse', 'sit'],
+  ['sit', 'ball', 'drink', 'mouse', 'wander', 'window', 'doze', 'tower', 'eat'],
 ];
 const labels: Record<DailyActivity, string> = {
   rest: 'のんびり', wander: 'おさんぽ', sit: 'おすわり', doze: 'うとうと',
-  eat: 'ごはん', drink: 'お水', ball: 'ボール遊び', tower: 'タワーの上',
+  eat: 'ごはん', drink: 'お水', ball: 'ボール遊び', mouse: 'ねずみ遊び', tower: 'タワーの上', window: '窓辺でひなたぼっこ',
 };
 const smooth = (t: number) => t * t * (3 - 2 * t);
 const unit = (t: number) => Math.max(0, Math.min(1, t));
@@ -36,7 +37,11 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
   const actors: Actor[] = cats.map(() => ({ stage: 'manual', activity: 'rest', time: 0,
     duration: 0, sequence: 0, route: [], waypoint: 0, blocked: 0 }));
   const ball = scene.getMeshByName('toy-ball'), stripe = scene.getMeshByName('ball-stripe');
+  const mouse = scene.getMeshByName('felt-mouse');
+  const mouseParts = scene.meshes.filter(mesh => ['felt-mouse', 'mouse-ear', 'mouse-tail'].includes(mesh.name));
+  const mousePartHomes = mouseParts.map(part => part.position.clone());
   const ballHome = ball?.position.clone(), stripeHome = stripe?.position.clone();
+  const mouseHome = mouse?.position.clone();
   const ballRotation = ball?.rotation.clone(), stripeRotation = stripe?.rotation.clone();
   const rippleMaterial = new StandardMaterial('water ripple', scene);
   rippleMaterial.emissiveColor = Color3.FromHexString('#b9e0dc');
@@ -48,7 +53,9 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     ripple.isPickable = false; ripple.setEnabled(false);
     return ripple;
   });
-  let enabled = false, paused = false, towerOwner = -1, ballOwner = -1;
+  let enabled = false, paused = false, towerOwner = -1, windowOwner = -1, ballOwner = -1, mouseOwner = -1;
+  const elevatedActivity = (cat: Companion): 'tower' | 'window' =>
+    Math.hypot(cat.root.position.x - WINDOW_PERCH.x, cat.root.position.z - WINDOW_PERCH.z) < 1.1 ? 'window' : 'tower';
   const announce = (index: number, activity: DailyActivity, label = labels[activity]) => onActivity(index, activity, label);
   const group = (cat: Companion) => cat.groups.find(g => g.name === cat.action)!;
   function restoreBall(index: number) {
@@ -58,6 +65,11 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     if (ball && ballRotation) ball.rotation.copyFrom(ballRotation);
     if (stripe && stripeRotation) stripe.rotation.copyFrom(stripeRotation);
     ballOwner = -1;
+  }
+  function restoreMouse(index: number) {
+    if (mouseOwner !== index) return;
+    mouseParts.forEach((part, i) => part.position.copyFrom(mousePartHomes[i]));
+    mouseOwner = -1;
   }
   function restoreAction(index: number) {
     const actor = actors[index];
@@ -90,29 +102,36 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     pose.node.scaling.copyFrom(pose.scale); pose.node.scaling.y *= eye;
   }
   function interrupt(index: number) {
-    const actor = actors[index]; restorePose(actor); restoreAction(index); restoreBall(index);
+    const actor = actors[index]; restorePose(actor); restoreAction(index); restoreBall(index); restoreMouse(index);
     if (actor.stage === 'walk') play(cats[index], 'IdleNorm');
     actor.stage = 'manual'; actor.time = 0; actor.route = []; actor.waypoint = 0; actor.afterLanding = undefined;
-    if (towerOwner === index && cats[index].supportY < .1 && cats[index].root.position.y < cats[index].baseY + .15) towerOwner = -1;
+    if (cats[index].supportY < .1 && cats[index].root.position.y < cats[index].baseY + .15) {
+      if (towerOwner === index) towerOwner = -1;
+      if (windowOwner === index) windowOwner = -1;
+    }
   }
   function wait(index: number, duration: number) {
-    const actor = actors[index]; restorePose(actor); restoreAction(index); restoreBall(index);
+    const actor = actors[index]; restorePose(actor); restoreAction(index); restoreBall(index); restoreMouse(index);
     actor.stage = 'wait'; actor.activity = 'rest'; actor.time = 0; actor.duration = duration;
     play(cats[index], 'IdleNorm'); announce(index, 'rest');
   }
   function startAct(index: number) {
     const actor = actors[index], cat = cats[index], activity = actor.activity;
     actor.time = 0;
-    if (activity === 'tower') { beginJump(index, true); return; }
+    if (activity === 'tower' || activity === 'window') { beginJump(index, true); return; }
     actor.stage = 'act';
-    actor.duration = ({ wander: 2.6, sit: 4.2, doze: 7.5, eat: 4.7, drink: 4.2, ball: 5.2, rest: 2 } as Record<DailyActivity, number>)[activity];
+    actor.duration = ({ wander: 2.6, sit: 4.2, doze: 7.5, eat: 4.7, drink: 4.2, ball: 5.2, mouse: 4.3, rest: 2 } as Partial<Record<DailyActivity, number>>)[activity]!;
     play(cat, activity === 'sit' || activity === 'doze' ? 'IdleSit' : 'IdleNorm');
-    if (activity === 'doze' || activity === 'eat' || activity === 'drink' || activity === 'ball') {
+    if (activity === 'doze' || activity === 'eat' || activity === 'drink' || activity === 'ball' || activity === 'mouse') {
       group(cat).goToFrame(group(cat).from); group(cat).pause(); capturePose(index);
     }
     if (activity === 'ball') {
       ballOwner = index; actor.actOrigin = cat.root.position.clone();
       if (ballHome) cat.root.rotation.y = angle(cat.root.position, ballHome);
+    }
+    if (activity === 'mouse') {
+      mouseOwner = index;
+      if (mouseHome) cat.root.rotation.y = angle(cat.root.position, mouseHome);
     }
     if (activity === 'eat' || activity === 'drink') {
       const bowl = activity === 'eat' ? { x: 2.78, z: 2.35 } : { x: 3.62, z: 2.35 };
@@ -126,9 +145,12 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     actor.activity = activity; actor.time = 0;
     if (activity === 'sit') { startAct(index); return; }
     if (activity === 'tower') towerOwner = index;
+    if (activity === 'window') windowOwner = index;
     const destination: FloorPoint = activity === 'tower' ? TOWER_APPROACH :
+      activity === 'window' ? WINDOW_APPROACH :
       activity === 'doze' ? LIFE_SPOTS.bed : activity === 'eat' ? LIFE_SPOTS.food :
       activity === 'drink' ? LIFE_SPOTS.water : activity === 'ball' ? LIFE_SPOTS.ball :
+      activity === 'mouse' ? LIFE_SPOTS.mouse :
       LIFE_SPOTS.wander[(actor.sequence + index) % LIFE_SPOTS.wander.length];
     const other = cats[1 - index].root.position;
     actor.route = planFloorRoute(cat.root.position, destination, { x: other.x, z: other.z });
@@ -141,28 +163,40 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     for (let attempt = 0; attempt < routine.length; attempt++) {
       const activity = routine[actor.sequence++ % routine.length];
       if ((activity === 'tower' && towerOwner >= 0 && towerOwner !== index) ||
-          (activity === 'ball' && ballOwner >= 0 && ballOwner !== index)) continue;
+          (activity === 'window' && windowOwner >= 0 && windowOwner !== index) ||
+          (activity === 'ball' && ballOwner >= 0 && ballOwner !== index) ||
+          (activity === 'mouse' && mouseOwner >= 0 && mouseOwner !== index)) continue;
       startActivity(index, activity); return;
     }
     wait(index, 2);
   }
   function finish(index: number) {
-    restorePose(actors[index]); restoreAction(index); restoreBall(index); wait(index, 1.4);
+    restorePose(actors[index]); restoreAction(index); restoreBall(index); restoreMouse(index); wait(index, 1.4);
   }
-  function beginJump(index: number, up: boolean, afterLanding?: () => void) {
+  function beginJump(index: number, up: boolean, afterLanding?: () => void, step = 0) {
     const actor = actors[index], cat = cats[index]; restorePose(actor);
+    const destination = up ? actor.activity : elevatedActivity(cat);
+    if (!up && destination === 'tower' && cat.root.position.y <= cat.baseY + TOWER_STEP.y + .3) step = 1;
+    actor.activity = destination;
+    const perch = destination === 'window' ? WINDOW_PERCH : TOWER_PERCH;
+    const approach = destination === 'window' ? WINDOW_APPROACH : TOWER_APPROACH;
     const other = cats[1 - index].root.position;
-    const floor = safeFloorPoint(TOWER_APPROACH.x, TOWER_APPROACH.z, { x: other.x, z: other.z });
-    actor.stage = up ? 'jump-up' : 'jump-down'; actor.time = 0; actor.duration = up ? 1.55 : 1.3;
-    actor.jumpPrep = up ? .23 : Math.abs(cat.root.position.y - cat.baseY - TOWER_PERCH.y) < .15 ? .18 : 0;
+    const floor = safeFloorPoint(approach.x, approach.z, { x: other.x, z: other.z });
+    const usingStep = destination === 'tower';
+    const target = usingStep && step === 0 ? TOWER_STEP : perch;
+    actor.stage = up ? 'jump-up' : 'jump-down'; actor.time = 0; actor.duration = up ? (usingStep ? 1.15 : 1.55) : (usingStep ? 1.03 : 1.3);
+    actor.jumpStep = step;
+    actor.jumpPrep = up ? .23 : .18;
     actor.jumpFrom = cat.root.position.clone(); actor.jumpTo = up ?
-      new Vector3(TOWER_PERCH.x, cat.baseY + TOWER_PERCH.y, TOWER_PERCH.z) :
-      new Vector3(floor.x, cat.baseY, floor.z);
+      new Vector3(target.x, cat.baseY + target.y, target.z) :
+      usingStep && step === 0 ? new Vector3(TOWER_STEP.x, cat.baseY + TOWER_STEP.y, TOWER_STEP.z) :
+        new Vector3(floor.x, cat.baseY, floor.z);
     actor.afterLanding = afterLanding;
     if (up) cat.supportY = 0;
     play(cat, 'IdleNorm'); group(cat).goToFrame(group(cat).from); group(cat).pause(); capturePose(index);
     cat.root.rotation.y = angle(actor.jumpFrom, actor.jumpTo);
-    announce(index, 'tower', up ? 'タワーへジャンプ' : 'タワーからジャンプ');
+    announce(index, destination, up ? (destination === 'window' ? '窓辺へジャンプ' : 'タワーをのぼる') :
+      (destination === 'window' ? '窓辺からジャンプ' : 'タワーからジャンプ'));
   }
   function tickJump(index: number, dt: number) {
     const actor = actors[index], cat = cats[index]; actor.time += dt;
@@ -209,17 +243,28 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     bend(actor, 'Tail2', 0, -.08 * stretch + .11 * reach, .1 * Math.sin(actor.time * 6 - .6) * (stretch + tuck));
     bend(actor, 'Tail3', 0, 0, .07 * Math.sin(actor.time * 6 - 1.1) * (stretch + tuck));
     if (up && actor.time >= flightEnd) {
-      const facing = angle(start, end), difference = Math.atan2(Math.sin(.8 - facing), Math.cos(.8 - facing));
+      const facing = angle(start, end), restYaw = actor.activity === 'window' ? 2.65 : .8;
+      const difference = Math.atan2(Math.sin(restYaw - facing), Math.cos(restYaw - facing));
       cat.root.rotation.y = facing + difference * ease((landing - .1) / .9);
     }
     if (actor.time < actor.duration) return;
     restorePose(actor); cat.root.position.copyFrom(end); cat.root.rotation.x = 0;
-    if (up) {
-      cat.supportY = TOWER_PERCH.y; towerOwner = index;
-      actor.stage = 'act'; actor.activity = 'tower'; actor.time = 0; actor.duration = 8;
-      cat.root.rotation.y = .8; play(cat, 'IdleSit'); announce(index, 'tower');
+    if (up && actor.activity === 'tower' && actor.jumpStep === 0) {
+      cat.supportY = TOWER_STEP.y;
+      beginJump(index, true, actor.afterLanding, 1);
+    } else if (!up && actor.activity === 'tower' && actor.jumpStep === 0 && start.y > cat.baseY + TOWER_STEP.y + .3) {
+      cat.supportY = TOWER_STEP.y;
+      beginJump(index, false, actor.afterLanding, 1);
+    } else if (up) {
+      cat.supportY = actor.activity === 'window' ? WINDOW_PERCH.y : TOWER_PERCH.y;
+      if (actor.activity === 'window') windowOwner = index; else towerOwner = index;
+      actor.stage = 'act'; actor.time = 0; actor.duration = actor.activity === 'window' ? 9 : 8;
+      cat.root.rotation.y = actor.activity === 'window' ? 2.65 : .8;
+      play(cat, 'IdleSit'); announce(index, actor.activity);
     } else {
-      cat.supportY = 0; if (towerOwner === index) towerOwner = -1;
+      cat.supportY = 0;
+      if (towerOwner === index) towerOwner = -1;
+      if (windowOwner === index) windowOwner = -1;
       onMoved(index, end.x, end.z);
       const callback = actor.afterLanding; actor.afterLanding = undefined;
       if (callback) { actor.stage = 'manual'; callback(); } else finish(index);
@@ -311,10 +356,28 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
           if (ballRotation) ball.rotation.z = ballRotation.z - dx / .12;
           if (stripeRotation) stripe.rotation.z = stripeRotation.z - dx / .12;
         }
+      } else if (actor.activity === 'mouse') {
+        const reach = Math.max(0, 1 - Math.abs(t - .9) / .42);
+        const secondReach = Math.max(0, 1 - Math.abs(t - 2.35) / .42);
+        const first = ease((t - .9) / .35), second = ease((t - 2.35) / .35);
+        bend(actor, 'spine.009', 0, .13);
+        bend(actor, 'Head', .1 * Math.sin(t * 3), .19 + .1 * Math.max(reach, secondReach));
+        bend(actor, 'front_thigh.L', 0, .45 * reach);
+        bend(actor, 'front_shin.L', 0, -.28 * reach);
+        bend(actor, 'front_foot.L', 0, .29 * reach);
+        bend(actor, 'front_thigh.R', 0, .45 * secondReach);
+        bend(actor, 'front_shin.R', 0, -.28 * secondReach);
+        bend(actor, 'front_foot.R', 0, .29 * secondReach);
+        bend(actor, 'TailBase', 0, 0, .14 * Math.sin(t * 4));
+        mouseParts.forEach((part, i) => {
+          part.position.copyFrom(mousePartHomes[i]);
+          part.position.x -= .26 * first - .2 * second;
+          part.position.y += .07 * Math.sin(Math.PI * ease((t - .9) / .55));
+        });
       }
     }
     if (actor.time < actor.duration) return;
-    if (actor.activity === 'tower') beginJump(index, false);
+    if (actor.activity === 'tower' || actor.activity === 'window') beginJump(index, false);
     else finish(index);
   }
   function tick(dt: number) {
@@ -326,8 +389,8 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
           actor.time += dt;
           if (actor.time > 2.2) {
             if (cat.supportY > .1) {
-              actor.stage = 'act'; actor.activity = 'tower'; actor.time = 0; actor.duration = 4;
-              play(cat, 'IdleSit'); announce(index, 'tower');
+              actor.stage = 'act'; actor.activity = elevatedActivity(cat); actor.time = 0; actor.duration = 4;
+              play(cat, 'IdleSit'); announce(index, actor.activity);
             } else wait(index, .1);
           }
         }
@@ -344,9 +407,10 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     cats.forEach((cat, index) => {
       interrupt(index);
       if (cat.supportY > .1) {
-        towerOwner = index; actors[index].activity = 'tower'; actors[index].stage = 'act';
+        actors[index].activity = elevatedActivity(cat); actors[index].stage = 'act';
+        if (actors[index].activity === 'window') windowOwner = index; else towerOwner = index;
         actors[index].duration = 7; actors[index].time = 0;
-        play(cat, 'IdleSit'); announce(index, 'tower');
+        play(cat, 'IdleSit'); announce(index, actors[index].activity);
       } else if (cat.root.position.y > cat.baseY + .15) {
         beginJump(index, false, () => wait(index, 1.5));
       } else wait(index, index ? 2.8 : 1.2);
@@ -365,15 +429,27 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     interrupt(index);
     const cat = cats[index];
     if (cat.supportY > .1) {
-      towerOwner = index; actors[index].stage = 'act'; actors[index].activity = 'tower';
+      actors[index].stage = 'act'; actors[index].activity = elevatedActivity(cat);
+      if (actors[index].activity === 'window') windowOwner = index; else towerOwner = index;
       actors[index].time = 0; actors[index].duration = 8;
-      play(cat, 'IdleSit'); announce(index, 'tower');
+      play(cat, 'IdleSit'); announce(index, actors[index].activity);
     } else if (enabled) wait(index, 2.2);
   }
   function commandTower(index: number): boolean {
     if (towerOwner >= 0 && towerOwner !== index) return false;
     if (cats[index].supportY > .1) return true;
     startActivity(index, 'tower'); return true;
+  }
+  function commandWindow(index: number): boolean {
+    if (windowOwner >= 0 && windowOwner !== index) return false;
+    if (cats[index].supportY > .1 && elevatedActivity(cats[index]) === 'window') return true;
+    if (cats[index].supportY > .1) return false;
+    startActivity(index, 'window'); return true;
+  }
+  function commandMouse(index: number): boolean {
+    if (mouseOwner >= 0 && mouseOwner !== index) return false;
+    if (cats[index].supportY > .1) return false;
+    startActivity(index, 'mouse'); return true;
   }
   function returnToFloor(index: number, done: () => void) {
     const cat = cats[index]; interrupt(index);
@@ -385,7 +461,7 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     cats.forEach((cat, index) => {
       interrupt(index); cat.supportY = 0; cat.root.position.y = cat.baseY; cat.root.rotation.x = 0;
     });
-    towerOwner = -1; ballOwner = -1;
+    towerOwner = -1; windowOwner = -1; ballOwner = -1; mouseOwner = -1;
   }
   function pause(value: boolean) {
     paused = value;
@@ -393,7 +469,7 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
       if (actor.pose) group(cats[index]).pause();
     });
   }
-  return { tick, startRelax, stopForMode, interrupt, placed, commandTower, returnToFloor,
+  return { tick, startRelax, stopForMode, interrupt, placed, commandTower, commandWindow, commandMouse, returnToFloor,
     resetImmediate, pause, canPerch: (index: number) => towerOwner < 0 || towerOwner === index,
     isTransitioning: (index: number) => actors[index].stage === 'jump-up' || actors[index].stage === 'jump-down',
     isEnabled: () => enabled };

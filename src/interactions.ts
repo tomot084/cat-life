@@ -35,6 +35,7 @@ export function createInteractions(scene: Scene, cats: Companion[], camera: ArcR
   announce: (text: string) => void, onMoved: (index: number, x: number, z: number) => void) {
   const pink = material(scene, 'treat packet', '#ce866e');
   const cream = material(scene, 'treat label', '#fff3d9');
+  const handMat = material(scene, 'gentle petting hand', '#e8b9a0');
   const toyMat = material(scene, 'play ball', '#ddae70');
   const texture = new DynamicTexture('affection', 64, scene, false);
   const ctx = texture.getContext() as CanvasRenderingContext2D;
@@ -58,11 +59,23 @@ export function createInteractions(scene: Scene, cats: Companion[], camera: ArcR
     heart.setEnabled(false);
     const toy = MeshBuilder.CreateSphere('play-ball', { diameter: .23, segments: 12 }, scene);
     toy.material = toyMat; toy.isPickable = false; toy.setEnabled(false);
-    return { packet, heart, toy };
+    const hand = new TransformNode(`${cat.key}-petting-hand`, scene);
+    const palm = MeshBuilder.CreateSphere('petting-palm', { diameter: .3, segments: 12 }, scene);
+    palm.parent = hand; palm.scaling.set(1.25, .36, .75); palm.material = handMat; palm.isPickable = false;
+    for (const x of [-.095, 0, .095]) {
+      const finger = MeshBuilder.CreateSphere('petting-finger', { diameter: .095, segments: 8 }, scene);
+      finger.parent = hand; finger.position.set(x, -.035, .13); finger.scaling.z = 1.5;
+      finger.material = handMat; finger.isPickable = false;
+    }
+    hand.setEnabled(false);
+    return { packet, heart, toy, hand };
   });
   let active: Active | undefined;
   const currentGroup = (cat: Companion) => cat.groups.find(g => g.name === cat.action)!;
-  const rigNames = ['Head', 'Ear.L', 'Ear.R', 'Eye.L', 'Eye.R', 'TailBase', 'front_foot.L'];
+  const rigNames = ['spine.008', 'spine.009', 'spine.010', 'Head', 'Ear.L', 'Ear.R',
+    'Eye.L', 'Eye.R', 'TailBase', 'Tail2', 'Tail3', 'shoulder.L', 'shoulder.R',
+    'front_thigh.L', 'front_thigh.R', 'front_shin.L', 'front_shin.R',
+    'front_foot.L', 'front_foot.R'];
   function capture(cat: Companion): Map<string, RigState> {
     const rig = new Map<string, RigState>();
     for (const name of rigNames) {
@@ -76,13 +89,14 @@ export function createInteractions(scene: Scene, cats: Companion[], camera: ArcR
       node.rotationQuaternion = rotation.clone(); node.scaling.copyFrom(scale);
     }
   }
-  function bend(rig: Map<string, RigState>, name: string, yaw: number, pitch: number, roll: number, eye = 1) {
+  function bend(rig: Map<string, RigState>, name: string, yaw = 0, pitch = 0, roll = 0, eye = 1) {
     const joint = rig.get(name); if (!joint) return;
     joint.node.rotationQuaternion = joint.rotation.multiply(Quaternion.RotationYawPitchRoll(yaw, pitch, roll));
     joint.node.scaling.copyFrom(joint.scale); joint.node.scaling.y *= eye;
   }
   function hide(index: number) {
-    effects[index].packet.setEnabled(false); effects[index].heart.setEnabled(false); effects[index].toy.setEnabled(false);
+    effects[index].packet.setEnabled(false); effects[index].heart.setEnabled(false);
+    effects[index].toy.setEnabled(false); effects[index].hand.setEnabled(false);
   }
   function cancel(paused: boolean, keepPosition = false) {
     if (!active) return;
@@ -112,6 +126,7 @@ export function createInteractions(scene: Scene, cats: Companion[], camera: ArcR
     effects[index].packet.setEnabled(kind === 'treat');
     effects[index].heart.setEnabled(kind === 'treat' || kind === 'pet');
     effects[index].toy.setEnabled(kind === 'toy');
+    effects[index].hand.setEnabled(kind === 'pet');
     const message: Record<InteractionKind, string> = {
       treat: `${cat.name}にちゅーる。顔を寄せて、ぺろり。`,
       pet: `${cat.name}をなでなで。目を細めて、うれしそう。`,
@@ -142,25 +157,51 @@ export function createInteractions(scene: Scene, cats: Companion[], camera: ArcR
       return;
     }
     resetRig(rig);
-    const offset = kind === 'treat' ? .22 * envelope : kind === 'pet' ? .07 * envelope : 0;
+    const offset = kind === 'treat' ? .10 * envelope : kind === 'pet' ? .06 * envelope : 0;
     cat.root.position.copyFrom(origin).addInPlace(toward.scale(offset));
     cat.root.position.y = origin.y + (kind === 'toy' ? .018 * envelope * Math.sin(time * 9) : .01 * envelope * Math.sin(time * 7));
-    cat.root.rotation.y = yaw + angleDifference(yaw, targetYaw) * (kind === 'treat' ? .86 * envelope : kind === 'toy' ? .55 * envelope : .1 * envelope);
-    const nod = kind === 'treat' ? .14 * envelope + .075 * envelope * Math.sin(time * 11) : 0;
-    const tilt = kind === 'pet' ? .15 * envelope : kind === 'toy' ? .09 * envelope * Math.sin(time * 5) : 0;
-    bend(rig, 'Head', kind === 'toy' ? .1 * envelope * Math.sin(time * 4) : .05 * envelope, nod, tilt);
-    bend(rig, 'Ear.L', 0, 0, .07 * envelope * Math.sin(time * 9));
-    bend(rig, 'Ear.R', 0, 0, -.07 * envelope * Math.sin(time * 9));
-    bend(rig, 'TailBase', 0, 0, .16 * envelope * Math.sin(time * 7));
-    const squint = kind === 'pet' ? 1 - .16 * envelope : 1;
+    cat.root.rotation.y = yaw + angleDifference(yaw, targetYaw) * (kind === 'treat' ? .86 * envelope : kind === 'pet' ? .8 * envelope : kind === 'toy' ? .55 * envelope : .1 * envelope);
+    const licking = kind === 'treat' ? envelope * (.5 + .5 * Math.sin(time * 13)) : 0;
+    const rub = kind === 'pet' ? envelope * Math.sin(time * 3.2) : 0;
+    const nod = kind === 'treat' ? .20 * envelope + .055 * licking : kind === 'pet' ? -.1 * envelope : 0;
+    const tilt = kind === 'pet' ? .24 * envelope + .07 * rub : kind === 'toy' ? .09 * envelope * Math.sin(time * 5) : 0;
+    bend(rig, 'spine.008', 0, kind === 'pet' ? -.08 * envelope : .035 * envelope);
+    bend(rig, 'spine.009', 0, kind === 'pet' ? -.12 * envelope : .08 * envelope, kind === 'pet' ? .06 * rub : 0);
+    bend(rig, 'spine.010', 0, kind === 'pet' ? -.09 * envelope : .09 * envelope);
+    bend(rig, 'Head', kind === 'toy' ? .1 * envelope * Math.sin(time * 4) : kind === 'pet' ? .14 * rub : .03 * envelope, nod, tilt);
+    bend(rig, 'Ear.L', 0, kind === 'pet' ? -.08 * envelope : 0, .06 * envelope * Math.sin(time * 4));
+    bend(rig, 'Ear.R', 0, kind === 'pet' ? -.08 * envelope : 0, -.06 * envelope * Math.sin(time * 4 + .7));
+    bend(rig, 'TailBase', 0, kind === 'pet' ? -.22 * envelope : 0, .22 * envelope * Math.sin(time * 3.5));
+    bend(rig, 'Tail2', 0, 0, .18 * envelope * Math.sin(time * 3.5 - .5));
+    bend(rig, 'Tail3', 0, 0, .15 * envelope * Math.sin(time * 3.5 - 1));
+    if (kind === 'pet') for (const side of ['L', 'R']) {
+      const knead = Math.max(0, Math.sin(time * 7 + (side === 'L' ? 0 : Math.PI))) * envelope;
+      bend(rig, `shoulder.${side}`, 0, -.08 * envelope);
+      bend(rig, `front_thigh.${side}`, 0, .18 * knead);
+      bend(rig, `front_shin.${side}`, 0, -.13 * knead);
+      bend(rig, `front_foot.${side}`, 0, .13 * knead);
+    }
+    const blink = kind === 'pet' ? Math.max(0, Math.sin(time * 7)) * .2 : licking * .12;
+    const squint = kind === 'pet' ? 1 - .55 * envelope - blink : 1 - blink;
     bend(rig, 'Eye.L', 0, 0, 0, squint); bend(rig, 'Eye.R', 0, 0, 0, squint);
     if (kind === 'toy') bend(rig, 'front_foot.L', 0, .16 * envelope * Math.sin(time * 6), 0);
-    const { packet, heart, toy } = effects[index];
-    packet.position.copyFrom(origin).addInPlace(new Vector3(Math.sin(targetYaw), 0, Math.cos(targetYaw)).scale(.73));
-    packet.position.y = origin.y - cat.baseY + .82 + .025 * Math.sin(time * 3); packet.rotation.set(-.4, targetYaw, .15);
+    const { packet, heart, toy, hand } = effects[index];
+    // Keep only the small nozzle at the muzzle; the pouch sits below and in
+    // front of the face so its broad surface cannot cover the eyes or nose.
+    packet.position.copyFrom(cat.root.position).addInPlace(toward.scale(.9));
+    packet.position.x += Math.cos(targetYaw) * .43;
+    packet.position.z -= Math.sin(targetYaw) * .43;
+    packet.position.y = cat.supportY + .7 + .014 * Math.sin(time * 13);
+    packet.rotation.set(.14, targetYaw, -.58);
+    packet.scaling.setAll(.01 + .99 * smooth(clamp(time / .38, 0, 1)) * smooth(clamp((duration - time) / .45, 0, 1)));
     heart.position.copyFrom(cat.root.position).addInPlace(new Vector3(Math.sin(targetYaw), 0, Math.cos(targetYaw)).scale(.53));
     heart.position.y = cat.root.position.y + 1.55 + .12 * envelope;
-    heart.visibility = clamp(.45 + envelope * 2, 0, 1);
+    heart.scaling.setAll(kind === 'pet' ? .66 : .85);
+    heart.visibility = kind === 'pet' ? .65 * smooth(clamp((time - 1.65) / .25, 0, 1)) * smooth(clamp((2.55 - time) / .35, 0, 1)) : .45 * envelope;
+    hand.position.copyFrom(cat.root.position).addInPlace(toward.scale(.22 + .1 * Math.sin(time * 5)));
+    hand.position.y = cat.supportY + 1.56 + .025 * Math.sin(time * 5);
+    hand.rotation.y = targetYaw;
+    hand.scaling.setAll(.01 + .99 * smooth(clamp(time / .3, 0, 1)) * smooth(clamp((duration - time) / .4, 0, 1)));
     toy.position.copyFrom(origin).addInPlace(new Vector3(Math.sin(targetYaw), 0, Math.cos(targetYaw)).scale(.8));
     toy.position.x += .38 * Math.sin(time * 4) * envelope;
     toy.position.y = origin.y - cat.baseY + .14 + .16 * Math.abs(Math.sin(time * 7)) * envelope;

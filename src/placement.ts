@@ -4,11 +4,15 @@ export type FloorPoint = { x: number; z: number };
 // after its production scale and placement are applied.
 export const TOWER_PERCH = { x: -2.66, z: -2.01, y: 2.05, dropRadius: 1.22 } as const;
 export const TOWER_APPROACH: FloorPoint = { x: -1.92, z: -1.24 };
+export const TOWER_STEP = { x: -2.52, z: -1.68, y: 1.12 } as const;
+export const WINDOW_PERCH = { x: .12, z: -2.93, y: 1.17 } as const;
+export const WINDOW_APPROACH: FloorPoint = { x: .12, z: -1.45 };
 export const LIFE_SPOTS = {
   bed: { x: 1.94, z: -.55 },
   food: { x: 2.78, z: 1.72 },
   water: { x: 3.62, z: 1.72 },
   ball: { x: -1.70, z: 1.57 },
+  mouse: { x: -1.78, z: .82 },
   wander: [{ x: -.8, z: -.7 }, { x: .7, z: -1.25 }, { x: .8, z: 1.55 }, { x: -1.3, z: .55 }],
 } as const;
 const furniture = [

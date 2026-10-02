@@ -5,7 +5,7 @@ import shelfUrl from './assets/room/bookcaseOpenLow.glb?url';
 import booksUrl from './assets/room/books.glb?url';
 import pillowUrl from './assets/room/pillow.glb?url';
 import plantUrl from './assets/room/plantSmall1.glb?url';
-import { TOWER_PERCH } from './placement';
+import { TOWER_PERCH, TOWER_STEP, WINDOW_PERCH } from './placement';
 
 export function material(scene: Scene, name: string, hex: string): StandardMaterial {
   const mat = new StandardMaterial(name, scene);
@@ -75,11 +75,31 @@ export async function createRoom(scene: Scene, shadows: ShadowGenerator): Promis
   box('rug', [4.7, .026, 3.6], [.1, .005, .45], linen, false);
   // Window, deep sill and gently folded curtains frame the cats without a photo backdrop.
   box('window-frame', [3, 1.72, .16], [.1, 2.02, -3.35], trim);
-  const sky = material(scene, 'daylight', '#bad9dc'); sky.emissiveColor.set(.24, .29, .29);
+  const outdoors = new DynamicTexture('window view', { width: 512, height: 320 }, scene, false);
+  const view = outdoors.getContext() as CanvasRenderingContext2D;
+  const horizon = view.createLinearGradient(0, 0, 0, 320);
+  horizon.addColorStop(0, '#b7d8dd'); horizon.addColorStop(.63, '#ecdfc7'); horizon.addColorStop(1, '#9ba991');
+  view.fillStyle = horizon; view.fillRect(0, 0, 512, 320);
+  view.fillStyle = '#e8e7d0'; view.beginPath(); view.arc(380, 68, 30, 0, Math.PI * 2); view.fill();
+  for (let layer = 0; layer < 3; layer++) {
+    view.fillStyle = ['#c1cbb4', '#92a899', '#6f8e7b'][layer];
+    const base = 235 + layer * 22;
+    view.beginPath(); view.moveTo(0, 320); view.lineTo(0, base);
+    for (let x = 0; x <= 512; x += 16) view.lineTo(x, base - 8 - 13 * Math.sin(x * .018 + layer * 2) - 7 * Math.sin(x * .053 + layer));
+    view.lineTo(512, 320); view.fill();
+  }
+  outdoors.update();
+  const sky = material(scene, 'garden through window', '#ffffff'); sky.diffuseTexture = outdoors;
+  sky.emissiveColor.set(.19, .19, .17);
   box('window', [2.8, 1.52, .035], [.1, 2.02, -3.25], sky, false);
   for (const x of [-.62, .82]) box('window-mullion', [.045, 1.56, .07], [x, 2.02, -3.2], trim);
   box('window-crossbar', [2.85, .05, .07], [.1, 2.0, -3.2], trim);
-  box('window-sill', [3.25, .09, .5], [.1, 1.15, -3.1], wood);
+  // The broad, supported shelf is a real landing surface for the window routine.
+  box('window-sill', [3.15, .11, 1.03], [WINDOW_PERCH.x, WINDOW_PERCH.y - .095, WINDOW_PERCH.z], wood);
+  box('window-sill-front', [3.2, .085, .065], [WINDOW_PERCH.x, .99, -2.39], trim);
+  for (const x of [-1.05, 1.25]) box('window-shelf-bracket', [.105, .75, .38], [x, .67, -3.0], trim);
+  const cushion = material(scene, 'window cushion', '#b4bca8');
+  box('window-cushion', [1.5, .04, .68], [WINDOW_PERCH.x, WINDOW_PERCH.y - .02, WINDOW_PERCH.z], cushion);
   const curtain = material(scene, 'curtain linen', '#f6efdf');
   for (const side of [-1, 1]) for (let i = 0; i < 6; i++) {
     const fold = cylinder('curtain-fold', .15, 1.93, [.1 + side * (1.37 + i * .07), 1.95, -3.05], curtain);
@@ -119,10 +139,12 @@ export async function createRoom(scene: Scene, shadows: ShadowGenerator): Promis
   const perchWood = material(scene, 'tower perch sage', '#a6b69a');
   box('tower-perch-extension', [1.35, .09, 1.12],
     [TOWER_PERCH.x, TOWER_PERCH.y - .045, TOWER_PERCH.z], perchWood);
+  box('tower-step', [1.02, .085, .82], [TOWER_STEP.x, TOWER_STEP.y - .043, TOWER_STEP.z], perchWood);
+  cylinder('tower-step-post', .12, TOWER_STEP.y - .08, [TOWER_STEP.x + .28, (TOWER_STEP.y - .08) / 2, TOWER_STEP.z - .22], rope);
   await prop(bedUrl, 'cat-bed', .43, [3.15, .015, -.45]);
   await prop(shelfUrl, 'bookcase', 1.1, [2.85, 0, -2.97]);
   await prop(booksUrl, 'books', .33, [2.6, 1.1, -2.93], -.1);
-  await prop(plantUrl, 'plant', .55, [.95, 1.2, -3.0]);
+  await prop(plantUrl, 'plant', .42, [1.48, 1.14, -3.12]);
   await prop(pillowUrl, 'pillow', .38, [3.15, .10, -.6], .25);
 
   // A feeding corner with visibly recessed bowls and separate water and kibble.
@@ -150,4 +172,22 @@ export async function createRoom(scene: Scene, shadows: ShadowGenerator): Promis
   string.material = rope; string.isPickable = false;
   const feather = finish(MeshBuilder.CreateSphere('toy-feather', { diameter: .15, segments: 8 }, scene), [-2.14, .06, 1.4], peach);
   feather.scaling.set(.7, .5, 2);
+  // A soft tunnel, felt mouse and crinkle box make the floor read as a lived-in play space.
+  const tunnel = material(scene, 'tunnel canvas', '#b9aa8c');
+  const tunnelInside = material(scene, 'tunnel lining', '#9c937b');
+  tunnelInside.backFaceCulling = false;
+  for (const z of [1.45, 1.73, 2.01]) {
+    const ring = finish(MeshBuilder.CreateTorus('play-tunnel-ring', { diameter: .72, thickness: .075, tessellation: 20 }, scene), [-3.42, .38, z], tunnel);
+    ring.rotation.x = Math.PI / 2;
+  }
+  const tunnelBody = finish(MeshBuilder.CreateCylinder('play-tunnel', { diameter: .68, height: .56, tessellation: 20, cap: 0 }, scene), [-3.42, .38, 1.73], tunnelInside);
+  tunnelBody.rotation.x = Math.PI / 2;
+  box('play-box-base', [.66, .035, .62], [3.82, .018, 1.12], rope);
+  for (const x of [3.5, 4.14]) box('play-box-side', [.035, .38, .62], [x, .2, 1.12], rope);
+  for (const z of [.82, 1.42]) box('play-box-side', [.62, .38, .035], [3.82, .2, z], rope);
+  const mouse = finish(MeshBuilder.CreateSphere('felt-mouse', { diameter: .18, segments: 12 }, scene), [-2.56, .095, .82], cushion);
+  mouse.scaling.set(1.25, .68, .75);
+  for (const x of [-2.61, -2.51]) finish(MeshBuilder.CreateSphere('mouse-ear', { diameter: .08, segments: 8 }, scene), [x, .19, .83], peach);
+  const mouseTail = MeshBuilder.CreateTube('mouse-tail', { path: [new Vector3(-2.44,.08,.83), new Vector3(-2.25,.06,.89), new Vector3(-2.15,.07,1.04)], radius: .014 }, scene);
+  mouseTail.material = rope; mouseTail.isPickable = false;
 }

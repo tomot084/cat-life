@@ -46,7 +46,7 @@ try {
     await page.locator('#more-actions summary').click();
     await page.getByRole('button', { name: 'タワーにのぼる' }).click();
     await mkdir('artifacts/ambient-life', { recursive: true });
-    await page.waitForFunction(() => document.querySelector('#daily-life').textContent.includes('ぷーたん：タワーへジャンプ'), null, { timeout: 90000 });
+    await page.waitForFunction(() => document.querySelector('#daily-life').textContent.includes('ぷーたん：タワーをのぼる'), null, { timeout: 90000 });
     await page.waitForTimeout(350);
     await page.screenshot({ path: `artifacts/ambient-life/${mobile ? 'mobile' : 'desktop'}-jump-up.png`, fullPage: true, timeout: 90000 });
     await page.waitForFunction(() => document.querySelector('#daily-life').textContent.includes('ぷーたん：タワーの上'), null, { timeout: 90000 });

@@ -5,7 +5,7 @@ import { createRoom } from './room';
 import { createInteractions, type Companion, type InteractionKind } from './interactions';
 import { attachRoomControls } from './controls';
 import { safeFloorPoint } from './placement';
-import { TOWER_PERCH } from './placement';
+import { TOWER_PERCH, WINDOW_PERCH } from './placement';
 import { createAmbientLife } from './ambient-life';
 import { createScruffCarry } from './scruff-carry';
 import purinUrl from './assets/models/purin.glb?url';
@@ -105,6 +105,12 @@ import './production.css';
     if (activity === 'tower' && label === 'タワーの上' && status.textContent === `${cats[index].name}がタワーへ向かいます。`) {
       status.textContent = `${cats[index].name}がタワーにのぼりました。`;
     }
+    if (activity === 'window' && label === '窓辺でひなたぼっこ' && status.textContent === `${cats[index].name}が窓辺へ向かいます。`) {
+      status.textContent = `${cats[index].name}が窓辺でひなたぼっこ。`;
+    }
+    if (activity === 'mouse' && label === 'ねずみ遊び' && status.textContent === `${cats[index].name}がねずみのおもちゃへ向かいます。`) {
+      status.textContent = `${cats[index].name}がねずみのおもちゃに前足を伸ばしました。`;
+    }
   }, index => interactions.isActive(cats[index]));
   const carry = createScruffCarry();
   function update() {
@@ -172,7 +178,23 @@ import './production.css';
       } else if (extra === 'tower') {
         if (mode !== 'relax') setMode('relax');
         interactions.cancel(false);
-        status.textContent = ambient.commandTower(selected) ? `${cats[selected].name}がタワーへ向かいます。` : 'タワーは今、順番待ちです。';
+        const go = () => { status.textContent = ambient.commandTower(selected) ? `${cats[selected].name}がタワーへ向かいます。` : 'タワーは今、順番待ちです。'; };
+        if (cats[selected].supportY > .1 && Math.hypot(cats[selected].root.position.x - TOWER_PERCH.x, cats[selected].root.position.z - TOWER_PERCH.z) > .9)
+          ambient.returnToFloor(selected, go);
+        else go();
+      } else if (extra === 'window') {
+        if (mode !== 'relax') setMode('relax');
+        interactions.cancel(false);
+        const go = () => { status.textContent = ambient.commandWindow(selected) ? `${cats[selected].name}が窓辺へ向かいます。` : '窓辺は今、順番待ちです。'; };
+        if (cats[selected].supportY > .1 && Math.hypot(cats[selected].root.position.x - WINDOW_PERCH.x, cats[selected].root.position.z - WINDOW_PERCH.z) > .9)
+          ambient.returnToFloor(selected, go);
+        else go();
+      } else if (extra === 'mouse') {
+        if (mode !== 'relax') setMode('relax');
+        interactions.cancel(false);
+        const go = () => { status.textContent = ambient.commandMouse(selected) ? `${cats[selected].name}がねずみのおもちゃへ向かいます。` : 'ねずみのおもちゃは今、順番待ちです。'; };
+        if (cats[selected].supportY > .1) ambient.returnToFloor(selected, go);
+        else go();
       } else if (extra === 'hide') {
         document.body.classList.add('ui-hidden');
         document.querySelector<HTMLButtonElement>('#show-ui')!.hidden = false;
