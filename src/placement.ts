@@ -2,6 +2,8 @@
 export type FloorPoint = { x: number; z: number };
 // Connor Adams' upper bed: measured STL surface, widened 1.4 in the room.
 export const TOWER_PERCH = { x: -3.05, z: -2.87, y: 2.6505 } as const;
+// Root is ahead of the paw centroid in this rig; offset toward the left edge.
+export const TOWER_STEP = { x: -2.8, z: -2.05, y: 1.829 } as const;
 export const TOWER_APPROACH: FloorPoint = { x: -1.78, z: -1.13 };
 export const WINDOW_PERCH = { x: .12, z: -2.88, y: 1.17 } as const;
 export const WINDOW_APPROACH: FloorPoint = { x: .12, z: -1.45 };
@@ -22,7 +24,7 @@ const furniture = [
   { x: -3.15, z: .1, radius: .75 }, // scratching pad
 ];
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
-const obstacles = (other?: FloorPoint) => other ? [...furniture, { ...other, radius: .88 }] : furniture;
+const obstacles = (other?: FloorPoint) => other ? [...furniture, { x: other.x, z: other.z, radius: .88 }] : furniture;
 
 export function isFloorSafe(x: number, z: number, other?: FloorPoint): boolean {
   if (x < -3.82 || x > 3.82 || z < -2.82 || z > 2.82) return false;

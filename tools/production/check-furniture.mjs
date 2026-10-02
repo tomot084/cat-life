@@ -1,3 +1,4 @@
+import { clickRoomAction } from './room-test-actions.mjs';
 import { chromium } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile, mkdir, stat } from 'node:fs/promises';
@@ -29,11 +30,10 @@ try {
     page.on('response', r => { if (r.status() >= 400) badResponses.push(r.url()); });
     await page.goto(origin + base);
     await page.waitForSelector('canvas[data-ready="true"]', { timeout: 90000 });
-    await page.getByRole('button', { name: 'ぷーたん', exact: true }).click();
-    await page.locator('#more-actions summary').click();
-    await page.getByRole('button', { name: 'タワーにのぼる' }).click();
-    await page.waitForFunction(() => document.querySelector('#daily-life').textContent.includes('ぷーたん：タワーの上'), null, { timeout: 90000 });
-    await page.getByRole('button', { name: '一時停止', exact: true }).click();
+    await clickRoomAction(page, 'ぷりん');
+    await clickRoomAction(page, 'タワーにのぼる');
+    await page.waitForFunction(() => document.querySelector('#daily-life').textContent.includes('ぷりん：タワーの上'), null, { timeout: 90000 });
+    await clickRoomAction(page, '一時停止');
     await page.screenshot({ path: `artifacts/furniture-adoption/${mobile ? 'mobile' : 'desktop'}.png`, fullPage: true, timeout: 90000 });
     await page.close();
     console.log(`${mobile ? 'mobile' : 'desktop'}: adopted furniture and tower landing captured`);

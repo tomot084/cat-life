@@ -13,7 +13,9 @@
     "test:production": "node tools/production/check-browser.mjs",
     "test:controls": "node tools/production/check-gestures.mjs",
     "test:ambient": "node tools/production/check-ambient.mjs",
-    "test:scruff": "node tools/production/check-scruff.mjs"
+    "test:scruff": "node tools/production/check-scruff.mjs",
+    "test:experience": "node tools/production/check-direct-touch.mjs",
+    "test:ui": "node tools/production/check-direct-ui.mjs"
   },
   "dependencies": {
     "@babylonjs/core": "^9.28.0",

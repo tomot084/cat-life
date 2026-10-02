@@ -46,11 +46,12 @@ test('the ball rolls only after a forepaw reaches to bat it', () => {
     const root = new TransformNode(index ? 'kokoro' : 'purin', scene);
     root.position.set(x, 0, .5);
     const paw = new TransformNode('front_foot.L', scene); paw.parent = root;
+    const right = new TransformNode('front_foot.R', scene); right.parent = root;
     const groups = ['IdleNorm', 'IdleSit', 'WalkCycle'].map(name => ({
       name, from: 0, start() { return this; }, stop() { return this; },
       goToFrame() { return this; }, pause() { return this; },
     })) as unknown as AnimationGroup[];
-    return { key: root.name, name: root.name, root, meshes: [], nodes: [paw], groups,
+    return { key: root.name, name: root.name, root, meshes: [], nodes: [paw, right], groups,
       homeX: x, homeZ: .5, baseX: x, baseY: 0, baseZ: .5, supportY: 0,
       walkX: x, walkZ: .5, action: 'IdleNorm', angle: 0 } satisfies Companion;
   });
@@ -65,10 +66,17 @@ test('the ball rolls only after a forepaw reaches to bat it', () => {
   const home = ball.position.x;
   for (let i = 0; i < 12; i++) life.tick(.05);
   assert.equal(ball.position.x, home, 'Ball moved before the bat');
-  for (let i = 0; i < 7; i++) life.tick(.05);
-  assert(Math.abs(cats[1].nodes[0].rotationQuaternion?.x ?? 0) > .01, 'Forepaw did not reach for the ball');
-  for (let i = 0; i < 7; i++) life.tick(.05);
-  assert(ball.position.x > home + .1, 'Ball did not roll after the bat');
+  let reached = false, rolled = false;
+  for (let i = 0; i < 100; i++) {
+    life.tick(.05);
+    assert(cats.every(cat => cat.root.position.asArray().every(Number.isFinite)), 'Tracking must keep finite positions');
+    reached ||= cats[1].nodes.some(node => Math.abs(node.rotationQuaternion?.x ?? 0) > .01);
+    if (ball.position.x !== home) { assert(reached, 'Motion needs a preceding paw reach'); rolled = true; break; }
+  }
+  assert(rolled, 'Contact should impart velocity');
+  const previous = ball.position.clone(); life.tick(.05);
+  assert(ball.position.subtract(previous).length() > 0, 'Ball must retain momentum after contact');
+  life.pause(true); const frozen = ball.position.clone(); life.tick(1); assert(ball.position.equals(frozen));
   scene.dispose(); engine.dispose();
 });
 
@@ -96,12 +104,12 @@ test('tower ascent coils, leaps, settles, and descent returns to the floor', () 
   for (let i = 0; i < 1000 && label !== 'タワーをのぼる'; i++) life.tick(.05);
   assert.equal(label, 'タワーをのぼる');
   const floorY = cats[0].root.position.y;
-  life.tick(.1);
+  life.tick(.25);
   assert(cats[0].root.position.y < floorY, 'Takeoff should begin with a crouch');
   assert(Math.abs(cats[0].nodes[1].rotationQuaternion?.x ?? 0) > .01, 'Hind leg should coil');
   for (let i = 0; i < 10; i++) life.tick(.05);
   assert(cats[0].root.position.y > floorY + .3, 'Cat should leap upward');
-  for (let i = 0; i < 50 && label !== 'タワーの上'; i++) life.tick(.05);
+  for (let i = 0; i < 100 && label !== 'タワーの上'; i++) life.tick(.05);
   assert.equal(label, 'タワーの上');
   assert.equal(cats[0].root.position.y, TOWER_PERCH.y);
   assert.equal(cats[0].root.rotation.x, 0);
@@ -111,9 +119,9 @@ test('tower ascent coils, leaps, settles, and descent returns to the floor', () 
   life.pause(false);
   for (let i = 0; i < 200 && label !== 'タワーからジャンプ'; i++) life.tick(.05);
   assert.equal(label, 'タワーからジャンプ');
-  for (let i = 0; i < 13; i++) life.tick(.05);
+  for (let i = 0; i < 18; i++) life.tick(.05);
   assert(cats[0].root.position.y < TOWER_PERCH.y - .2 && cats[0].root.position.y > 0, 'Descent should pass through the air');
-  for (let i = 0; i < 60; i++) life.tick(.05);
+  for (let i = 0; i < 100; i++) life.tick(.05);
   assert.equal(cats[0].supportY, 0);
   assert.equal(cats[0].root.position.y, 0);
   scene.dispose(); engine.dispose();
@@ -141,7 +149,7 @@ test('window command lands on the sill and returns to the floor', () => {
   assert.equal(cats[0].root.position.z, WINDOW_PERCH.z);
   let landed = false;
   life.returnToFloor(0, () => { landed = true; });
-  for (let i = 0; i < 60 && !landed; i++) life.tick(.05);
+  for (let i = 0; i < 100 && !landed; i++) life.tick(.05);
   assert(landed); assert.equal(cats[0].supportY, 0);
   scene.dispose(); engine.dispose();
 });

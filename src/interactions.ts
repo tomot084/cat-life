@@ -2,7 +2,7 @@ import { AbstractMesh, AnimationGroup, ArcRotateCamera, DynamicTexture, Mesh, Me
 import { material } from './room';
 import { safeFloorPoint } from './placement';
 
-export type InteractionKind = 'treat' | 'pet' | 'toy' | 'call';
+export type InteractionKind = 'treat' | 'pet' | 'call';
 export interface Companion {
   key: string;
   name: string;
@@ -36,7 +36,6 @@ export function createInteractions(scene: Scene, cats: Companion[], camera: ArcR
   const pink = material(scene, 'treat packet', '#ce866e');
   const cream = material(scene, 'treat label', '#fff3d9');
   const handMat = material(scene, 'gentle petting hand', '#e8b9a0');
-  const toyMat = material(scene, 'play ball', '#ddae70');
   const texture = new DynamicTexture('affection', 64, scene, false);
   const ctx = texture.getContext() as CanvasRenderingContext2D;
   ctx.clearRect(0, 0, 64, 64); ctx.fillStyle = '#d48278';
@@ -57,8 +56,6 @@ export function createInteractions(scene: Scene, cats: Companion[], camera: ArcR
     const heart = MeshBuilder.CreatePlane('affection-heart', { size: .32 }, scene);
     heart.material = heartMat; heart.billboardMode = Mesh.BILLBOARDMODE_ALL; heart.isPickable = false;
     heart.setEnabled(false);
-    const toy = MeshBuilder.CreateSphere('play-ball', { diameter: .23, segments: 12 }, scene);
-    toy.material = toyMat; toy.isPickable = false; toy.setEnabled(false);
     const hand = new TransformNode(`${cat.key}-petting-hand`, scene);
     const palm = MeshBuilder.CreateSphere('petting-palm', { diameter: .3, segments: 12 }, scene);
     palm.parent = hand; palm.scaling.set(1.25, .36, .75); palm.material = handMat; palm.isPickable = false;
@@ -68,7 +65,7 @@ export function createInteractions(scene: Scene, cats: Companion[], camera: ArcR
       finger.material = handMat; finger.isPickable = false;
     }
     hand.setEnabled(false);
-    return { packet, heart, toy, hand };
+    return { packet, heart, hand };
   });
   let active: Active | undefined;
   const currentGroup = (cat: Companion) => cat.groups.find(g => g.name === cat.action)!;
@@ -96,7 +93,7 @@ export function createInteractions(scene: Scene, cats: Companion[], camera: ArcR
   }
   function hide(index: number) {
     effects[index].packet.setEnabled(false); effects[index].heart.setEnabled(false);
-    effects[index].toy.setEnabled(false); effects[index].hand.setEnabled(false);
+    effects[index].hand.setEnabled(false);
   }
   function cancel(paused: boolean, keepPosition = false) {
     if (!active) return;
@@ -125,12 +122,10 @@ export function createInteractions(scene: Scene, cats: Companion[], camera: ArcR
     active = { cat, index, kind, time: 0, origin, yaw, targetYaw, target, group, frame, rig: capture(cat) };
     effects[index].packet.setEnabled(kind === 'treat');
     effects[index].heart.setEnabled(kind === 'treat' || kind === 'pet');
-    effects[index].toy.setEnabled(kind === 'toy');
     effects[index].hand.setEnabled(kind === 'pet');
     const message: Record<InteractionKind, string> = {
       treat: `${cat.name}にちゅーる。顔を寄せて、ぺろり。`,
       pet: `${cat.name}をなでなで。目を細めて、うれしそう。`,
-      toy: `${cat.name}とボールで遊ぼう。`,
       call: `${cat.name}、おいで。`,
     };
     announce(message[kind]);
@@ -139,7 +134,7 @@ export function createInteractions(scene: Scene, cats: Companion[], camera: ArcR
     if (!active || paused) return;
     active.time += dt;
     const { cat, index, kind, time, origin, yaw, targetYaw, target, rig } = active;
-    const duration = kind === 'treat' ? 3.6 : kind === 'pet' ? 2.8 : kind === 'toy' ? 3.4 : 2.6;
+    const duration = kind === 'treat' ? 3.6 : kind === 'pet' ? 2.8 : 2.6;
     if (time >= duration) {
       if (kind === 'call') {
         cat.root.position.copyFrom(target); cat.root.rotation.y = targetYaw;
@@ -159,16 +154,16 @@ export function createInteractions(scene: Scene, cats: Companion[], camera: ArcR
     resetRig(rig);
     const offset = kind === 'treat' ? .10 * envelope : kind === 'pet' ? .06 * envelope : 0;
     cat.root.position.copyFrom(origin).addInPlace(toward.scale(offset));
-    cat.root.position.y = origin.y + (kind === 'toy' ? .018 * envelope * Math.sin(time * 9) : .01 * envelope * Math.sin(time * 7));
-    cat.root.rotation.y = yaw + angleDifference(yaw, targetYaw) * (kind === 'treat' ? .86 * envelope : kind === 'pet' ? .8 * envelope : kind === 'toy' ? .55 * envelope : .1 * envelope);
+    cat.root.position.y = origin.y + (.01 * envelope * Math.sin(time * 7));
+    cat.root.rotation.y = yaw + angleDifference(yaw, targetYaw) * (kind === 'treat' ? .86 * envelope : kind === 'pet' ? .8 * envelope : .1 * envelope);
     const licking = kind === 'treat' ? envelope * (.5 + .5 * Math.sin(time * 13)) : 0;
     const rub = kind === 'pet' ? envelope * Math.sin(time * 3.2) : 0;
     const nod = kind === 'treat' ? .20 * envelope + .055 * licking : kind === 'pet' ? -.1 * envelope : 0;
-    const tilt = kind === 'pet' ? .24 * envelope + .07 * rub : kind === 'toy' ? .09 * envelope * Math.sin(time * 5) : 0;
+    const tilt = kind === 'pet' ? .24 * envelope + .07 * rub : 0;
     bend(rig, 'spine.008', 0, kind === 'pet' ? -.08 * envelope : .035 * envelope);
     bend(rig, 'spine.009', 0, kind === 'pet' ? -.12 * envelope : .08 * envelope, kind === 'pet' ? .06 * rub : 0);
     bend(rig, 'spine.010', 0, kind === 'pet' ? -.09 * envelope : .09 * envelope);
-    bend(rig, 'Head', kind === 'toy' ? .1 * envelope * Math.sin(time * 4) : kind === 'pet' ? .14 * rub : .03 * envelope, nod, tilt);
+    bend(rig, 'Head', kind === 'pet' ? .14 * rub : .03 * envelope, nod, tilt);
     bend(rig, 'Ear.L', 0, kind === 'pet' ? -.08 * envelope : 0, .06 * envelope * Math.sin(time * 4));
     bend(rig, 'Ear.R', 0, kind === 'pet' ? -.08 * envelope : 0, -.06 * envelope * Math.sin(time * 4 + .7));
     bend(rig, 'TailBase', 0, kind === 'pet' ? -.22 * envelope : 0, .22 * envelope * Math.sin(time * 3.5));
@@ -184,8 +179,7 @@ export function createInteractions(scene: Scene, cats: Companion[], camera: ArcR
     const blink = kind === 'pet' ? Math.max(0, Math.sin(time * 7)) * .2 : licking * .12;
     const squint = kind === 'pet' ? 1 - .55 * envelope - blink : 1 - blink;
     bend(rig, 'Eye.L', 0, 0, 0, squint); bend(rig, 'Eye.R', 0, 0, 0, squint);
-    if (kind === 'toy') bend(rig, 'front_foot.L', 0, .16 * envelope * Math.sin(time * 6), 0);
-    const { packet, heart, toy, hand } = effects[index];
+    const { packet, heart, hand } = effects[index];
     // Keep only the small nozzle at the muzzle; the pouch sits below and in
     // front of the face so its broad surface cannot cover the eyes or nose.
     packet.position.copyFrom(cat.root.position).addInPlace(toward.scale(.9));
@@ -202,10 +196,7 @@ export function createInteractions(scene: Scene, cats: Companion[], camera: ArcR
     hand.position.y = cat.supportY + 1.56 + .025 * Math.sin(time * 5);
     hand.rotation.y = targetYaw;
     hand.scaling.setAll(.01 + .99 * smooth(clamp(time / .3, 0, 1)) * smooth(clamp((duration - time) / .4, 0, 1)));
-    toy.position.copyFrom(origin).addInPlace(new Vector3(Math.sin(targetYaw), 0, Math.cos(targetYaw)).scale(.8));
-    toy.position.x += .38 * Math.sin(time * 4) * envelope;
-    toy.position.y = origin.y - cat.baseY + .14 + .16 * Math.abs(Math.sin(time * 7)) * envelope;
-    toy.rotation.y += dt * 5;
+
   }
   function pause(value: boolean) {
     for (const cat of cats) for (const g of cat.groups) if (g.isStarted) {

@@ -8,7 +8,7 @@ type Carry = {
   headSway: number; legSway: number; tailSway: number; time: number;
   initialSupport: number; liftY: number;
   phase: 'lift' | 'carry' | 'land'; landTime: number; floor: Vector3;
-  complete?: () => void;
+  landFrom?: Vector3; complete?: () => void;
 };
 const names = ['spine.008', 'spine.009', 'spine.010', 'Head', 'shoulder.L', 'shoulder.R',
   'front_thigh.L', 'front_thigh.R', 'front_shin.L', 'front_shin.R', 'front_foot.L', 'front_foot.R',
@@ -40,11 +40,12 @@ export function createScruffCarry() {
     const a = active, { cat, target, anchor } = a;
     // Keep the pointer over the nape. The lift stays modest for the room scale.
     target.set(x + anchor.x - cat.root.position.x, a.liftY + supportY - a.initialSupport, z + anchor.z - cat.root.position.z);
-    a.floor.x = x; a.floor.z = z;
+    a.floor.set(x, cat.baseY + supportY, z);
   }
   function drop(done: () => void) {
     if (!active) { done(); return; }
     active.floor.y = active.cat.baseY + active.cat.supportY;
+    active.landFrom = active.cat.root.position.clone();
     active.phase = 'land'; active.landTime = 0; active.complete = done;
   }
   function finish() {
@@ -63,7 +64,7 @@ export function createScruffCarry() {
     if (a.phase === 'lift' && a.time > .34) a.phase = 'carry';
     const lift = smooth(a.time / .34);
     if (a.phase === 'land') a.landTime += dt;
-    const pose = a.phase === 'land' ? 1 - smooth(a.landTime / .46) : lift;
+    const pose = a.phase === 'land' ? 1 - smooth(a.landTime / .7) : lift;
     if (a.phase !== 'land') {
       const target = a.target.clone();
       if (a.phase === 'lift') target.y = a.anchor.y + (target.y - a.anchor.y) * lift;
@@ -104,9 +105,17 @@ export function createScruffCarry() {
     cat.root.rotation.x = -.46 * pose;
     cat.root.rotation.z = lag * .45;
     if (a.phase === 'land') {
-      const t = smooth(a.landTime / .46);
-      cat.root.position.copyFrom(Vector3.Lerp(cat.root.position, a.floor, Math.min(1, dt * 16 + t * .3)));
-      if (a.landTime >= .46) finish();
+      const t = smooth(a.landTime / .38);
+      cat.root.position.copyFrom(Vector3.Lerp(a.landFrom!, a.floor, t));
+      const absorb = Math.sin(Math.PI * Math.max(0, Math.min(1, (a.landTime - .38) / .32)));
+      cat.root.position.y -= .045 * absorb;
+      for (const side of ['L', 'R']) {
+        for (const name of [`front_shin.${side}`, `shin.${side}`]) {
+          const joint = a.joints.get(name);
+          if (joint) joint.node.rotationQuaternion = joint.node.rotationQuaternion!.multiply(Quaternion.RotationYawPitchRoll(0, .14 * absorb, 0));
+        }
+      }
+      if (a.landTime >= .7) finish();
     } else {
       const neck = a.joints.get('spine.010')?.node;
       if (neck) {

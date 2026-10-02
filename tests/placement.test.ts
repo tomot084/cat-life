@@ -29,3 +29,11 @@ test('daily routes stay clear of furniture and the other cat', () => {
     }
   }
 });
+
+test('class-backed coordinates retain a finite avoidance boundary', () => {
+  // Babylon Vector3 exposes x/z through getters, not own enumerable fields.
+  const other = Object.create({ x: 1.1, z: .5 }) as { x: number; z: number };
+  const point = safeFloorPoint(other.x, other.z, other);
+  assert(Number.isFinite(point.x) && Number.isFinite(point.z));
+  assert(Math.hypot(point.x - other.x, point.z - other.z) >= .88);
+});

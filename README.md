@@ -1,4 +1,4 @@
-# ぷーたんとこころのお部屋
+# ぷりんとこころのお部屋
 
 Babylon.jsで動く二匹の部屋。「のんびり過ごす」では、それぞれの猫が部屋を歩き、寝床でうとうとし、食事・水飲み・ボール遊び・タワーへのジャンプを順に楽しみます。ちゅーる・なでる・呼ぶなどの操作もできます。
 
@@ -17,12 +17,14 @@ http://localhost:5173/ を開きます。
 
 | 操作 | PC | スマートフォン |
 |---|---|---|
-| 猫を選ぶ | 猫をクリック | 猫をタップ |
+| 猫と遊ぶ | 猫をクリックし、出てきたメニューからなでる・ちゅーる等を選ぶ | 猫をタップし、下の小さなパネルから操作を選ぶ |
 | 猫を移動 | 猫を約0.4秒長押ししてドラッグ。タワーの上段にも置けます | 猫を長押ししてスワイプ。タワーの上段にも置けます |
-| 視点を回す | 猫以外をドラッグ、または猫を短くドラッグ | 猫以外をスワイプ |
+| 視点を回す | 空き場所からドラッグ | 猫以外をスワイプ |
 | 拡大・縮小 | ホイール | 2本指ピンチ |
 
-猫を離すと床かタワー上段の足場に置けます。床を歩くときは家具ともう一匹を避けます。「ほかの遊び」の「タワーにのぼる」から選択中の猫を呼び寄せることもできます。選択中の猫にはちゅーる・なでるが使えます。呼ぶ、ボール、カメラの寄り、配置と視点のリセット、UI非表示も選べます。一時停止中は反応・エフェクトも止まります。
+名前ボタンでの選び直しは不要です。空き場所を触ると猫メニューが閉じます。猫から始めたドラッグはカメラに渡さず、PC 380ms／タッチ420msの長押しで首筋を支点に持ち上げます。離すと着地・衝撃吸収・姿勢回復を行います。床を歩くときは家具ともう一匹を避けます。「ほかの遊び」の「タワーにのぼる」から選択中の猫を呼び寄せることもできます。選択中の猫にはちゅーる・なでるが使えます。猫メニューには呼ぶ、ボール、ねずみ、カメラの寄りがあります。モードと一時停止は上部、配置・視点リセットとUI非表示は「設定」にまとめています。一時停止中は反応・エフェクトも止まります。
+
+タワーは実メッシュ上の屋根と上段を順に使います。向き合わせ、ため、蹴り、空中姿勢、前後脚の着地と回復を高さに応じて変えます。ボール・ねずみは位置と速度を持ち、猫は観察・狙い・接触・追跡・休憩を繰り返します。
 
 ## GitHub Pages
 
@@ -35,14 +37,14 @@ Settings → Pages → SourceをGitHub Actionsに設定します。mainへのpus
 PAGES_BUILD=true npm run build
 TEST_BASE=/cat-life/ npm run test:production
 TEST_BASE=/cat-life/ npm run test:controls
-TEST_BASE=/cat-life/ npm run test:ambient
+TEST_BASE=/cat-life/ npm run test:experience
 ```
 
-baseはoriginまたはActionsのGITHUB_REPOSITORYから取得します。公開先の推測はしません。ブラウザ検証には `npx playwright install chromium` が必要です。
+baseはoriginまたはActionsのGITHUB_REPOSITORYから取得します。公開先の推測はしません。ブラウザ検証には `npx playwright install --with-deps chromium` が必要です。`test:controls`・`test:ambient`・`test:scruff` は、直接操作の統合検査 `test:experience` と同じ検査を実行します。
 
 ## 公開モデルとCredits
 
-**Tuxedo Cat Animated 2.0** by **DreamNoms** を土台に、ぷーたん・こころ向けに体型・顔・色柄・眼と耳の位置を改変。
+**Tuxedo Cat Animated 2.0** by **DreamNoms** を土台に、ぷりん・こころ向けに体型・顔・色柄・眼と耳の位置を改変。
 
 - 元モデル： https://sketchfab.com/3d-models/tuxedo-cat-animated-20-783fcb78b55b4394a212c2b6392e1113
 - ライセンス： [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)

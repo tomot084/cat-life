@@ -1,4 +1,4 @@
-import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, DirectionalLight, ShadowGenerator, Color3, Color4, ImportMeshAsync, TransformNode, DynamicTexture, StandardMaterial, MeshBuilder } from '@babylonjs/core';
+import { Matrix, Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, DirectionalLight, ShadowGenerator, Color3, Color4, ImportMeshAsync, TransformNode, DynamicTexture, StandardMaterial, MeshBuilder } from '@babylonjs/core';
 import '@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent';
 import '@babylonjs/loaders/glTF/index.js';
 import { createRoom } from './room';
@@ -22,6 +22,8 @@ import './production.css';
   };
   setRenderResolution();
   const scene = new Scene(engine);
+  // All room input belongs to controls.ts, including multi-touch.
+  scene.detachControl();
   scene.clearColor = new Color4(.94, .925, .89, 1);
   scene.ambientColor = new Color3(.12, .1, .08);
   const camera = new ArcRotateCamera('room-camera', 1.20, 1.12, canvas.clientWidth < 600 ? 13.4 : 9.6, new Vector3(0, .85, 0), scene);
@@ -37,7 +39,7 @@ import './production.css';
   shadows.bias = .001; shadows.normalBias = .02; shadows.setDarkness(.22);
   await createRoom(scene, shadows);
   const cats: Companion[] = [];
-  for (const [index, [key, name, url]] of [['purin', 'ぷーたん', purinUrl], ['kokoro', 'こころ', kokoroUrl]].entries()) {
+  for (const [index, [key, name, url]] of [['purin', 'ぷりん', purinUrl], ['kokoro', 'こころ', kokoroUrl]].entries()) {
     const result = await ImportMeshAsync(url, scene, { pluginExtension: '.glb' });
     const root = new TransformNode(key, scene);
     for (const node of [...result.meshes, ...result.transformNodes]) if (!node.parent) node.parent = root;
@@ -83,7 +85,9 @@ import './production.css';
   const towerMarker = MeshBuilder.CreateTorus('tower-landing-ring', { diameter: .72, thickness: .03, tessellation: 40 }, scene);
   towerMarker.position.set(TOWER_PERCH.x, TOWER_PERCH.y + .035, TOWER_PERCH.z);
   towerMarker.material = selectionMat; towerMarker.isPickable = false; towerMarker.setEnabled(false);
-  let mode = 'relax', paused = false, selected = 0, grabbed = -1;
+  let mode = 'relax', paused = false, selected = 0, grabbed = -1, hasSelection = false;
+  const actionPanel = document.querySelector<HTMLElement>('#cat-actions')!;
+  document.querySelector('#close-actions')!.addEventListener('click', () => { actionPanel.hidden = true; hasSelection = false; });
   const status = document.querySelector<HTMLOutputElement>('#interaction-status')!;
   const profile = document.querySelector<HTMLElement>('#cat-profile')!;
   const dailyLife = document.querySelector<HTMLElement>('#daily-life')!;
@@ -95,12 +99,15 @@ import './production.css';
   const interactions = createInteractions(scene, cats, camera, text => { status.textContent = text; }, setBase);
   const play = (cat: Companion, action: string) => {
     for (const group of cat.groups) group.stop();
-    cat.groups.find(g => g.name === action)!.start(true); cat.action = action;
+    const nextGroup = cat.groups.find(g => g.name === action)!;
+    nextGroup.enableBlending = true; nextGroup.blendingSpeed = .12;
+    nextGroup.speedRatio = 1;
+    nextGroup.start(true); cat.action = action;
     if (paused) cat.groups.find(g => g.name === action)!.pause();
   };
   const ambient = createAmbientLife(scene, cats, play, setBase, (index, activity, label) => {
     dailyLabels[index] = label;
-    dailyLife.textContent = `ぷーたん：${dailyLabels[0]} · こころ：${dailyLabels[1]}`;
+    dailyLife.textContent = `ぷりん：${dailyLabels[0]} · こころ：${dailyLabels[1]}`;
     canvas.dataset[index ? 'kokoroActivity' : 'purinActivity'] = activity;
     if (activity === 'tower' && label === 'タワーの上' && status.textContent === `${cats[index].name}がタワーへ向かいます。`) {
       status.textContent = `${cats[index].name}がタワーにのぼりました。`;
@@ -111,18 +118,37 @@ import './production.css';
     if (activity === 'mouse' && label === 'ねずみ遊び' && status.textContent === `${cats[index].name}がねずみのおもちゃへ向かいます。`) {
       status.textContent = `${cats[index].name}がねずみのおもちゃに前足を伸ばしました。`;
     }
-  }, index => interactions.isActive(cats[index]));
+  }, index => interactions.isActive(cats[index]) || grabbed === index);
   const carry = createScruffCarry();
   function update() {
     document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
-    document.querySelectorAll<HTMLButtonElement>('[data-cat]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.cat) === selected)));
     document.querySelector('#pause')!.textContent = paused ? '再生' : '一時停止';
     document.querySelectorAll<HTMLButtonElement>('[data-interaction]').forEach(b => { b.disabled = paused; });
-    profile.textContent = selected ? 'こころ · 黒灰白' : 'ぷーたん · 茶白';
+    profile.textContent = cats[selected].name;
     dailyLife.hidden = mode !== 'relax';
   }
+  function positionActionPanel() {
+    if (!actionPanel.hidden && canvas.clientWidth > 600) {
+      const projected = Vector3.Project(cats[selected].root.position.add(new Vector3(0, 1.25, 0)), Matrix.Identity(), scene.getTransformMatrix(), camera.viewport.toGlobal(canvas.clientWidth, canvas.clientHeight));
+      const width = actionPanel.offsetWidth, height = actionPanel.offsetHeight;
+      const top = Math.max(12, Math.min(canvas.clientHeight - height - 12, projected.y - 30));
+      const candidates = [projected.x + 42, projected.x - width - 42]
+        .map(left => Math.max(12, Math.min(canvas.clientWidth - width - 12, left)));
+      const overlap = (left: number) => cats.reduce((score, cat) => {
+        const head = cat.nodes.find(node => node.name === 'Head'); head?.computeWorldMatrix(true);
+        const point = Vector3.Project(head?.getAbsolutePosition() ?? cat.root.position,
+          Matrix.Identity(), scene.getTransformMatrix(), camera.viewport.toGlobal(canvas.clientWidth, canvas.clientHeight));
+        const x = Math.max(0, Math.min(left + width, point.x + 45) - Math.max(left, point.x - 45));
+        const y = Math.max(0, Math.min(top + height, point.y + 85) - Math.max(top, point.y - 25));
+        return score + x * y;
+      }, 0);
+      candidates.sort((a, b) => overlap(a) - overlap(b));
+      actionPanel.style.left = `${candidates[0]}px`;
+      actionPanel.style.top = `${top}px`;
+    }
+  }
   function select(index: number) {
-    selected = index; update();
+    selected = index; hasSelection = true; canvas.dataset.selectedCat = cats[index].key; actionPanel.hidden = false; update(); positionActionPanel();
     status.textContent = `${cats[index].name}を選びました。`;
   }
   const applyModeCat = (i: number) => {
@@ -137,6 +163,7 @@ import './production.css';
       play(cat, next === 'walk' ? 'WalkCycle' : next === 'sit' ? 'IdleSit' : i ? 'IdleSit' : 'IdleNorm');
   };
   const setMode = (next: string) => {
+    actionPanel.hidden = true;
     carry.finish();
     grabbed = -1; grabState = undefined; towerMarker.setEnabled(false);
     interactions.cancel(paused); mode = next; paused = false;
@@ -145,28 +172,35 @@ import './production.css';
     status.textContent = 'ふたりの、いつものひととき。'; update();
   };
   document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(b => { b.onclick = () => setMode(b.dataset.mode!); });
-  document.querySelectorAll<HTMLButtonElement>('[data-cat]').forEach(b => { b.onclick = () => select(Number(b.dataset.cat)); });
   document.querySelectorAll<HTMLButtonElement>('[data-interaction]').forEach(b => {
     b.onclick = () => {
-      const kind = b.dataset.interaction as InteractionKind;
+      const index = selected;
+      const kind = b.dataset.interaction as InteractionKind | 'toy';
       if (!paused) {
-        if (ambient.isTransitioning(selected) || (kind === 'call' && cats[selected].supportY > .1)) {
-          ambient.returnToFloor(selected, () => interactions.start(selected, kind, paused));
+        if (kind === 'toy') {
+          const go = () => { status.textContent = ambient.commandBall(index) ? `${cats[index].name}とボールで遊ぼう。` : 'ボールは今、順番待ちです。'; };
+          interactions.cancel(false);
+          if (cats[index].supportY > .1) ambient.returnToFloor(index, go); else go();
+        } else if (ambient.isTransitioning(index) || (kind === 'call' && cats[index].supportY > .1)) {
+          ambient.returnToFloor(index, () => interactions.start(index, kind, paused));
         } else {
-          ambient.interrupt(selected);
-          interactions.start(selected, kind, paused);
+          ambient.interrupt(index);
+          interactions.start(index, kind, paused);
         }
       }
       document.querySelector<HTMLDetailsElement>('#more-actions')!.open = false;
+      if (b.dataset.interaction === 'call' || b.dataset.interaction === 'toy' || ['mouse', 'tower', 'window', 'focus'].includes(b.dataset.extra ?? '')) actionPanel.hidden = true;
     };
   });
   document.querySelectorAll<HTMLButtonElement>('[data-extra]').forEach(b => {
     b.onclick = () => {
+      const index = selected;
       const extra = b.dataset.extra;
       if (extra === 'focus') {
-        camera.setTarget(cats[selected].root.position.add(new Vector3(0, .8, 0)));
-        camera.radius = 5.6; status.textContent = `${cats[selected].name}の近くへ。`;
+        camera.setTarget(cats[index].root.position.add(new Vector3(0, .8, 0)));
+        camera.radius = 5.6; status.textContent = `${cats[index].name}の近くへ。`;
       } else if (extra === 'reset-all') {
+        interactions.cancel(paused);
         carry.finish();
         grabbed = -1; grabState = undefined; towerMarker.setEnabled(false);
         ambient.resetImmediate();
@@ -178,28 +212,29 @@ import './production.css';
       } else if (extra === 'tower') {
         if (mode !== 'relax') setMode('relax');
         interactions.cancel(false);
-        const go = () => { status.textContent = ambient.commandTower(selected) ? `${cats[selected].name}がタワーへ向かいます。` : 'タワーは今、順番待ちです。'; };
-        if (cats[selected].supportY > .1 && Math.hypot(cats[selected].root.position.x - TOWER_PERCH.x, cats[selected].root.position.z - TOWER_PERCH.z) > .9)
-          ambient.returnToFloor(selected, go);
+        const go = () => { status.textContent = ambient.commandTower(index) ? `${cats[index].name}がタワーへ向かいます。` : 'タワーは今、順番待ちです。'; };
+        if (cats[index].supportY > .1 && Math.hypot(cats[index].root.position.x - TOWER_PERCH.x, cats[index].root.position.z - TOWER_PERCH.z) > .9)
+          ambient.returnToFloor(index, go);
         else go();
       } else if (extra === 'window') {
         if (mode !== 'relax') setMode('relax');
         interactions.cancel(false);
-        const go = () => { status.textContent = ambient.commandWindow(selected) ? `${cats[selected].name}が窓辺へ向かいます。` : '窓辺は今、順番待ちです。'; };
-        if (cats[selected].supportY > .1 && Math.hypot(cats[selected].root.position.x - WINDOW_PERCH.x, cats[selected].root.position.z - WINDOW_PERCH.z) > .9)
-          ambient.returnToFloor(selected, go);
+        const go = () => { status.textContent = ambient.commandWindow(index) ? `${cats[index].name}が窓辺へ向かいます。` : '窓辺は今、順番待ちです。'; };
+        if (cats[index].supportY > .1 && Math.hypot(cats[index].root.position.x - WINDOW_PERCH.x, cats[index].root.position.z - WINDOW_PERCH.z) > .9)
+          ambient.returnToFloor(index, go);
         else go();
       } else if (extra === 'mouse') {
         if (mode !== 'relax') setMode('relax');
         interactions.cancel(false);
-        const go = () => { status.textContent = ambient.commandMouse(selected) ? `${cats[selected].name}がねずみのおもちゃへ向かいます。` : 'ねずみのおもちゃは今、順番待ちです。'; };
-        if (cats[selected].supportY > .1) ambient.returnToFloor(selected, go);
+        const go = () => { status.textContent = ambient.commandMouse(index) ? `${cats[index].name}がねずみのおもちゃへ向かいます。` : 'ねずみのおもちゃは今、順番待ちです。'; };
+        if (cats[index].supportY > .1) ambient.returnToFloor(index, go);
         else go();
       } else if (extra === 'hide') {
         document.body.classList.add('ui-hidden');
         document.querySelector<HTMLButtonElement>('#show-ui')!.hidden = false;
       }
       document.querySelector<HTMLDetailsElement>('#more-actions')!.open = false;
+      if (b.dataset.interaction === 'call' || b.dataset.interaction === 'toy' || ['mouse', 'tower', 'window', 'focus'].includes(b.dataset.extra ?? '')) actionPanel.hidden = true;
     };
   });
   document.querySelector<HTMLButtonElement>('#show-ui')!.onclick = () => {
@@ -216,6 +251,8 @@ import './production.css';
   let grabSurface: 'floor' | 'tower' = 'floor';
   attachRoomControls(canvas, scene, camera, cats, {
     select,
+    dismiss: () => { actionPanel.hidden = true; hasSelection = false; },
+    canGrab: () => !paused,
     canPerch: index => ambient.canPerch(index),
     grab(index) {
       carry.finish();
@@ -227,6 +264,7 @@ import './production.css';
       idle.start(true); idle.goToFrame(idle.from); idle.pause();
       carry.grab(cat); grabbed = index;
       towerMarker.setEnabled(ambient.canPerch(index)); grabSurface = cat.supportY > .1 ? 'tower' : 'floor';
+      actionPanel.hidden = true;
       status.textContent = `${cat.name}をつかみました。床の好きな場所へ。`;
     },
     move(index, x, z, surface) {
@@ -267,20 +305,38 @@ import './production.css';
     const elapsed = engine.getDeltaTime() / 1000;
     const dt = Math.min(elapsed, .05);
     if (mode === 'walk' && !paused) cats.forEach((cat, index) => {
-      if (grabbed === index || cat.supportY > .1 || ambient.isTransitioning(index) || interactions.isActive(cat)) return;
+      if (grabbed === index || cat.supportY > .1 || ambient.isBusy(index) || interactions.isActive(cat)) return;
+      if (cat.action !== 'WalkCycle') play(cat, 'WalkCycle');
       cat.angle += dt * .45;
       cat.root.position.x = cat.walkX + .42 * Math.sin(cat.angle);
       cat.root.position.z = cat.walkZ + .42 * Math.cos(cat.angle);
       cat.root.rotation.y = Math.atan2(Math.cos(cat.angle), -Math.sin(cat.angle));
     });
+    if (mode === 'sit' && !paused) cats.forEach((cat, index) => {
+      if (grabbed !== index && !ambient.isBusy(index) && !interactions.isActive(cat) && cat.action !== 'IdleSit') play(cat, 'IdleSit');
+    });
     ambient.tick(Math.min(elapsed, .25));
     interactions.tick(Math.min(elapsed, .25), paused);
-    carry.tick(dt);
+    if (!paused) {
+      let carryTime = Math.min(elapsed, .25);
+      while (carryTime > 0) { const step = Math.min(carryTime, 1 / 60); carry.tick(step); carryTime -= step; }
+    }
     selection.position.set(cats[selected].root.position.x, cats[selected].supportY + .05, cats[selected].root.position.z);
+    selection.setEnabled(hasSelection || grabbed >= 0);
     selection.visibility = grabbed === selected ? 1 : .6;
+    cats.forEach(cat => {
+      const head = cat.nodes.find(node => node.name === 'Head');
+      head?.computeWorldMatrix(true);
+      const screen = Vector3.Project(head?.getAbsolutePosition() ?? cat.root.position.add(new Vector3(0, .75, 0)), Matrix.Identity(), scene.getTransformMatrix(), camera.viewport.toGlobal(canvas.clientWidth, canvas.clientHeight));
+      canvas.dataset[`${cat.key}Screen`] = JSON.stringify({ x: screen.x, y: screen.y });
+      canvas.dataset[`${cat.key}Position`] = JSON.stringify(cat.root.position.asArray());
+    });
+    const perchScreen = Vector3.Project(new Vector3(TOWER_PERCH.x, TOWER_PERCH.y, TOWER_PERCH.z), Matrix.Identity(), scene.getTransformMatrix(), camera.viewport.toGlobal(canvas.clientWidth, canvas.clientHeight));
+    canvas.dataset.towerScreen = JSON.stringify({x: perchScreen.x, y: perchScreen.y});
+    canvas.dataset.camera = JSON.stringify([camera.alpha, camera.beta, camera.radius]);
     scene.render();
   });
-  addEventListener('resize', setRenderResolution);
+  addEventListener('resize', () => { setRenderResolution(); positionActionPanel(); });
   new ResizeObserver(setRenderResolution).observe(canvas);
   canvas.dataset.ready = 'true';
 })().catch(error => {

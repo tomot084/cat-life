@@ -1,3 +1,4 @@
+import { clickRoomAction, selectRoomCat } from './room-test-actions.mjs';
 import { chromium } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir, stat } from 'node:fs/promises';
@@ -40,10 +41,10 @@ try {
   await page.goto(origin + base);
   await page.waitForSelector('canvas[data-ready="true"]', { timeout: 90000 });
   const readyMs = Date.now() - started;
-  assert.equal(await page.title(), 'ぷーたんとこころのお部屋');
+  assert.equal(await page.title(), 'ぷりんとこころのお部屋');
   const canvas = page.locator('canvas');
   const frame = () => canvas.evaluate(element => element.toDataURL('image/png'));
-  const click = name => page.getByRole('button', { name, exact: true }).click();
+  const click = name => clickRoomAction(page, name);
   const modes = [], interactions = [];
   for (const [mode, title] of [['relax', 'のんびり過ごす'], ['walk', 'ふたりでおさんぽ'], ['sit', '並んでおすわり']]) {
     await click(title);
@@ -51,7 +52,7 @@ try {
     const a = await frame(); await page.waitForTimeout(400);
     assert.notEqual(a, await frame(), mode + ' must animate');
     modes.push({ mode, frames_change: true });
-    for (const cat of ['ぷーたん', 'こころ']) {
+    for (const cat of ['ぷりん', 'こころ']) {
       await click(cat);
       await click('ちゅーる');
       assert((await page.locator('output').innerText()).includes(cat + 'にちゅーる'));
@@ -62,6 +63,12 @@ try {
       await click(title); // A mode change cancels any reaction immediately.
       assert.equal(await page.locator('output').innerText(), 'ふたりの、いつものひととき。');
     }
+  }
+  // Reset in mid-reaction must cancel the old origin before placing cats home.
+  await click('ぷりん'); await click('なでる'); await click('配置を戻す');
+  for (const [key,x] of [['purin',-1.15],['kokoro',1.15]]) {
+    const position=JSON.parse(await canvas.getAttribute(`data-${key}-position`));
+    assert(Math.abs(position[0]-x)<.01 && Math.abs(position[2]-.5)<.01,'Reset restores both cats during petting');
   }
   // Natural completion, rapid repetition, and pause/resume in mid-reaction.
   await click('のんびり過ごす');
@@ -76,15 +83,17 @@ try {
   await click('並んでおすわり'); await click('一時停止');
   await page.waitForTimeout(350); const stopped = await frame();
   await page.waitForTimeout(300); assert.equal(stopped, await frame(), 'Pause must freeze');
+  const stoppedCamera = await canvas.getAttribute('data-camera');
   const box = await canvas.boundingBox();
-  await page.mouse.move(box.x + box.width * .5, box.y + box.height * .5);
-  await page.mouse.down(); await page.mouse.move(box.x + box.width * .65, box.y + box.height * .56, { steps: 15 }); await page.mouse.up();
+  await page.mouse.move(box.x + 30, box.y + 50);
+  await page.mouse.down(); await page.mouse.move(box.x + 130, box.y + 100, { steps: 15 }); await page.mouse.up();
   await page.waitForTimeout(700); const rotated = await frame();
   assert.notEqual(rotated, stopped, 'Drag must rotate');
   await page.mouse.wheel(0, -400); await page.waitForTimeout(700);
   assert.notEqual(rotated, await frame(), 'Wheel must zoom');
   await click('視点を戻す'); await page.waitForTimeout(700);
-  assert.equal(stopped, await frame(), 'Reset must restore camera');
+  // Orbit intentionally dismisses selection, so image pixels may differ.
+  assert.equal(await canvas.getAttribute('data-camera'), stoppedCamera, 'Reset must restore camera');
   await page.locator('footer summary').click();
   const credits = await page.locator('footer').innerText();
   for (const name of ['DreamNoms', 'Kenney', '3D Assets', 'Connor Adams', 'Dollhouse Cat Furniture', 'Cushion Bed', 'CC0 1.0', 'Public Domain', 'CC BY 4.0', 'bookcaseOpenLow', 'books', 'pillow', 'plantSmall1']) assert(credits.includes(name));
@@ -95,13 +104,15 @@ try {
   await monitor(mobile); await mobile.goto(origin + base);
   await mobile.waitForSelector('canvas[data-ready="true"]', { timeout: 90000 });
   assert(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'No horizontal overflow');
+  await selectRoomCat(mobile, 'kokoro');
   for (const name of ['のんびり過ごす', 'ふたりでおさんぽ', '並んでおすわり', 'ちゅーる', 'なでる']) assert(await mobile.getByRole('button', { name, exact: true }).isVisible());
-  await mobile.getByRole('button', { name: 'こころ', exact: true }).tap();
+  await selectRoomCat(mobile, 'kokoro');
   await mobile.getByRole('button', { name: 'なでる', exact: true }).tap();
   assert((await mobile.locator('output').innerText()).includes('こころをなでなで'));
   await mobile.close();
   assert.equal(errors.length, 0, JSON.stringify(errors));
   assert.equal(badResponses.length, 0, JSON.stringify(badResponses));
+  assert.equal(warnings.length, 0, JSON.stringify(warnings));
   await writeFile(`${out}/${label}-browser.json`, JSON.stringify({ passed: true, base, readyMs, modes, interactions, rapidRepeat: true, cancelOnModeChange: true, completion: true, pauseReaction: true, drag: true, zoom: true, reset: true, mobile: true, errors, warnings, badResponses, requests: [...new Set(requests.map(u => u.replace(origin, '')))] }, null, 2));
   console.log(`${base}: 10 models, 3 modes, both interactions × both cats × all modes, pause/resume, drag, zoom, reset, credits, mobile; zero errors/404 passed`);
 } finally { await browser?.close(); await new Promise(r => server.close(r)); }

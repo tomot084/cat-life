@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 import { readFile } from 'node:fs/promises';
 import { ImportMeshAsync, NullEngine, Ray, Scene, TransformNode, Vector3 } from '@babylonjs/core';
 import '@babylonjs/loaders/glTF';
-import { TOWER_PERCH } from '../src/placement';
+import { TOWER_PERCH, TOWER_STEP } from '../src/placement';
 
 test('the upper bed supports the seated cats on its actual visible surface', async () => {
   const engine = new NullEngine(), scene = new Scene(engine);
@@ -16,6 +16,10 @@ test('the upper bed supports the seated cats on its actual visible surface', asy
     root.scaling.set(scale * 1.4, scale, scale * 1.4);
     root.position.set(-3.05 - center.x * scale * 1.4, -bounds.min.y * scale, -2.25 - center.z * scale * 1.4);
     for (const mesh of result.meshes) mesh.computeWorldMatrix(true);
+    for (const dx of [-.46, 0, .46]) for (const dz of [-.25, 0, .25]) {
+      const hit = scene.pickWithRay(new Ray(new Vector3(TOWER_STEP.x + .30 + dx, 4, TOWER_STEP.z + dz), new Vector3(0, -1, 0)), mesh => result.meshes.includes(mesh));
+      assert(hit?.pickedPoint && Math.abs(hit.pickedPoint.y - TOWER_STEP.y) < .015, `Roof support: ${dx}, ${dz}: ${hit?.pickedPoint?.y}`);
+    }
     // Largest cat's sitting paw spread plus margin, facing along the long bed axis.
     for (const dx of [-.36, 0, .36]) for (const dz of [-.29, 0, .29]) {
       const ray = new Ray(new Vector3(TOWER_PERCH.x + dx, 4, TOWER_PERCH.z + dz), new Vector3(0, -1, 0));
