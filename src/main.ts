@@ -7,6 +7,7 @@ import { attachRoomControls } from './controls';
 import { safeFloorPoint } from './placement';
 import { TOWER_PERCH } from './placement';
 import { createAmbientLife } from './ambient-life';
+import { createScruffCarry } from './scruff-carry';
 import purinUrl from './assets/models/purin.glb?url';
 import kokoroUrl from './assets/models/kokoro.glb?url';
 import './production.css';
@@ -105,6 +106,7 @@ import './production.css';
       status.textContent = `${cats[index].name}がタワーにのぼりました。`;
     }
   }, index => interactions.isActive(cats[index]));
+  const carry = createScruffCarry();
   function update() {
     document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
     document.querySelectorAll<HTMLButtonElement>('[data-cat]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.cat) === selected)));
@@ -129,6 +131,8 @@ import './production.css';
       play(cat, next === 'walk' ? 'WalkCycle' : next === 'sit' ? 'IdleSit' : i ? 'IdleSit' : 'IdleNorm');
   };
   const setMode = (next: string) => {
+    carry.finish();
+    grabbed = -1; grabState = undefined; towerMarker.setEnabled(false);
     interactions.cancel(paused); mode = next; paused = false;
     if (next === 'relax') ambient.startRelax();
     else ambient.stopForMode(applyModeCat);
@@ -157,6 +161,8 @@ import './production.css';
         camera.setTarget(cats[selected].root.position.add(new Vector3(0, .8, 0)));
         camera.radius = 5.6; status.textContent = `${cats[selected].name}の近くへ。`;
       } else if (extra === 'reset-all') {
+        carry.finish();
+        grabbed = -1; grabState = undefined; towerMarker.setEnabled(false);
         ambient.resetImmediate();
         cats.forEach((cat, index) => {
           setBase(index, cat.homeX, cat.homeZ);
@@ -190,13 +196,14 @@ import './production.css';
     select,
     canPerch: index => ambient.canPerch(index),
     grab(index) {
+      carry.finish();
       interactions.cancel(paused); ambient.interrupt(index);
       const cat = cats[index], group = cat.groups.find(g => g.name === cat.action)!;
       grabState = { index, group, frame: group.getCurrentFrame() };
       for (const g of cat.groups) g.stop();
-      const idle = cat.groups.find(g => g.name === (cat.action === 'IdleSit' ? 'IdleSit' : 'IdleNorm'))!;
+      const idle = cat.groups.find(g => g.name === 'IdleNorm')!;
       idle.start(true); idle.goToFrame(idle.from); idle.pause();
-      grabbed = index; cat.root.position.y = cat.baseY + cat.supportY + .035;
+      carry.grab(cat); grabbed = index;
       towerMarker.setEnabled(ambient.canPerch(index)); grabSurface = cat.supportY > .1 ? 'tower' : 'floor';
       status.textContent = `${cat.name}をつかみました。床の好きな場所へ。`;
     },
@@ -204,11 +211,11 @@ import './production.css';
       const cat = cats[index];
       if (surface === 'tower') {
         cat.supportY = TOWER_PERCH.y;
-        cat.root.position.set(TOWER_PERCH.x, cat.baseY + TOWER_PERCH.y + .035, TOWER_PERCH.z);
+        carry.move(TOWER_PERCH.x, TOWER_PERCH.z, cat.supportY);
       } else {
         const other = cats[1 - index].root.position;
         const point = safeFloorPoint(x, z, { x: other.x, z: other.z });
-        cat.supportY = 0; cat.root.position.set(point.x, cat.baseY + .035, point.z);
+        cat.supportY = 0; carry.move(point.x, point.z, 0);
       }
       if (grabSurface !== surface) {
         grabSurface = surface;
@@ -217,14 +224,16 @@ import './production.css';
     },
     drop(index) {
       if (grabbed !== index || !grabState) return;
-      const cat = cats[index]; cat.root.position.y = cat.baseY + cat.supportY;
-      setBase(index, cat.root.position.x, cat.root.position.z);
-      for (const g of cat.groups) g.stop();
-      grabState.group.start(true); grabState.group.goToFrame(grabState.frame);
-      if (paused) grabState.group.pause();
-      if (cat.supportY > .1 && mode !== 'relax') setMode('relax');
-      ambient.placed(index); towerMarker.setEnabled(false);
-      grabbed = -1; grabState = undefined;
+      const cat = cats[index], saved = grabState;
+      towerMarker.setEnabled(false);
+      carry.drop(() => {
+        setBase(index, cat.root.position.x, cat.root.position.z);
+        for (const g of cat.groups) g.stop();
+        saved.group.start(true); saved.group.goToFrame(saved.frame);
+        if (paused) saved.group.pause();
+        if (cat.supportY > .1 && mode !== 'relax') setMode('relax');
+        ambient.placed(index); grabState = undefined; grabbed = -1;
+      });
       status.textContent = cat.supportY > .1 ? `${cat.name}をタワーの上にのせました。` : `${cat.name}をここに置きました。`;
     },
   });
@@ -243,6 +252,7 @@ import './production.css';
     });
     ambient.tick(Math.min(elapsed, .25));
     interactions.tick(Math.min(elapsed, .25), paused);
+    carry.tick(dt);
     selection.position.set(cats[selected].root.position.x, cats[selected].supportY + .05, cats[selected].root.position.z);
     selection.visibility = grabbed === selected ? 1 : .6;
     scene.render();
