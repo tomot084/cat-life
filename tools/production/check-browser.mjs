@@ -87,7 +87,7 @@ try {
   assert.equal(stopped, await frame(), 'Reset must restore camera');
   await page.locator('footer summary').click();
   const credits = await page.locator('footer').innerText();
-  for (const name of ['DreamNoms', 'Kenney', '3D Assets', 'Cat Tree', 'Cushion Bed', 'CC0 1.0', 'CC BY 4.0', 'bookcaseOpenLow', 'books', 'pillow', 'plantSmall1']) assert(credits.includes(name));
+  for (const name of ['DreamNoms', 'Kenney', '3D Assets', 'Pat Siefring', 'Cat Tree', 'Cushion Bed', 'CC0 1.0', 'CC BY 3.0', 'CC BY 4.0', 'bookcaseOpenLow', 'books', 'pillow', 'plantSmall1']) assert(credits.includes(name));
   assert.equal(new Set(requests.filter(u => u.endsWith('.glb'))).size, 8);
   await page.close();
 

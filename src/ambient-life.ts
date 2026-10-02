@@ -1,6 +1,6 @@
 import { Color3, MeshBuilder, Quaternion, Scene, StandardMaterial, TransformNode, Vector3 } from '@babylonjs/core';
 import type { Companion } from './interactions';
-import { LIFE_SPOTS, planFloorRoute, safeFloorPoint, TOWER_APPROACH, TOWER_PERCH, TOWER_STEP, WINDOW_APPROACH, WINDOW_PERCH, type FloorPoint } from './placement';
+import { LIFE_SPOTS, planFloorRoute, safeFloorPoint, TOWER_APPROACH, TOWER_PERCH, WINDOW_APPROACH, WINDOW_PERCH, type FloorPoint } from './placement';
 
 export type DailyActivity = 'rest' | 'wander' | 'sit' | 'doze' | 'eat' | 'drink' | 'ball' | 'mouse' | 'tower' | 'window';
 type Stage = 'manual' | 'wait' | 'walk' | 'act' | 'jump-up' | 'jump-down';
@@ -10,7 +10,6 @@ type Actor = {
   route: FloorPoint[]; waypoint: number; pose?: Map<string, JointPose>;
   actOrigin?: Vector3;
   jumpFrom?: Vector3; jumpTo?: Vector3; jumpPrep?: number;
-  jumpStep?: number;
   afterLanding?: () => void; blocked: number;
 };
 const routines: DailyActivity[][] = [
@@ -173,24 +172,19 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
   function finish(index: number) {
     restorePose(actors[index]); restoreAction(index); restoreBall(index); restoreMouse(index); wait(index, 1.4);
   }
-  function beginJump(index: number, up: boolean, afterLanding?: () => void, step = 0) {
+  function beginJump(index: number, up: boolean, afterLanding?: () => void) {
     const actor = actors[index], cat = cats[index]; restorePose(actor);
     const destination = up ? actor.activity : elevatedActivity(cat);
-    if (!up && destination === 'tower' && cat.root.position.y <= cat.baseY + TOWER_STEP.y + .3) step = 1;
     actor.activity = destination;
     const perch = destination === 'window' ? WINDOW_PERCH : TOWER_PERCH;
     const approach = destination === 'window' ? WINDOW_APPROACH : TOWER_APPROACH;
     const other = cats[1 - index].root.position;
     const floor = safeFloorPoint(approach.x, approach.z, { x: other.x, z: other.z });
-    const usingStep = destination === 'tower';
-    const target = usingStep && step === 0 ? TOWER_STEP : perch;
-    actor.stage = up ? 'jump-up' : 'jump-down'; actor.time = 0; actor.duration = up ? (usingStep ? 1.15 : 1.55) : (usingStep ? 1.03 : 1.3);
-    actor.jumpStep = step;
+    actor.stage = up ? 'jump-up' : 'jump-down'; actor.time = 0; actor.duration = up ? 1.55 : 1.3;
     actor.jumpPrep = up ? .23 : .18;
     actor.jumpFrom = cat.root.position.clone(); actor.jumpTo = up ?
-      new Vector3(target.x, cat.baseY + target.y, target.z) :
-      usingStep && step === 0 ? new Vector3(TOWER_STEP.x, cat.baseY + TOWER_STEP.y, TOWER_STEP.z) :
-        new Vector3(floor.x, cat.baseY, floor.z);
+      new Vector3(perch.x, cat.baseY + perch.y, perch.z) :
+      new Vector3(floor.x, cat.baseY, floor.z);
     actor.afterLanding = afterLanding;
     if (up) cat.supportY = 0;
     play(cat, 'IdleNorm'); group(cat).goToFrame(group(cat).from); group(cat).pause(); capturePose(index);
@@ -249,13 +243,7 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     }
     if (actor.time < actor.duration) return;
     restorePose(actor); cat.root.position.copyFrom(end); cat.root.rotation.x = 0;
-    if (up && actor.activity === 'tower' && actor.jumpStep === 0) {
-      cat.supportY = TOWER_STEP.y;
-      beginJump(index, true, actor.afterLanding, 1);
-    } else if (!up && actor.activity === 'tower' && actor.jumpStep === 0 && start.y > cat.baseY + TOWER_STEP.y + .3) {
-      cat.supportY = TOWER_STEP.y;
-      beginJump(index, false, actor.afterLanding, 1);
-    } else if (up) {
+    if (up) {
       cat.supportY = actor.activity === 'window' ? WINDOW_PERCH.y : TOWER_PERCH.y;
       if (actor.activity === 'window') windowOwner = index; else towerOwner = index;
       actor.stage = 'act'; actor.time = 0; actor.duration = actor.activity === 'window' ? 9 : 8;

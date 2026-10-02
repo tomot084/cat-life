@@ -37,13 +37,12 @@
   },
   "cat-tree": {
     "file": "src/assets/room/cat-tree.glb",
-    "author": "3D Assets (@3dassets)",
-    "source": "https://3dassets.dev/assets/companion-animals-and-pet-home-cat-tree-e126b0aa",
-    "license": "CC0-1.0",
-    "aiGenerated": true,
-    "sha256": "ad6bbf52e92eec2271595e0b039d863a0315ee15eaac533b770aff52ab1e1272",
-    "bytes": 124148,
-    "triangles": 2504
+    "author": "Pat Siefring",
+    "source": "https://poly.pizza/m/daMM0nomcTL",
+    "license": "CC-BY-3.0",
+    "sha256": "bdb30c80512671e9d97c581bdb3dc525f9e76a148885e03e52c1648a8947e267",
+    "bytes": 39244,
+    "triangles": 572
   },
   "cat-bed": {
     "file": "src/assets/room/cat-bed.glb",

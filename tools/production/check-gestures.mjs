@@ -97,7 +97,7 @@ try {
   await click(desktop, '視点を戻す'); await click(desktop, '再生');
   await desktop.locator('footer summary').click();
   const credits = await desktop.locator('footer').innerText();
-  for (const name of ['DreamNoms', 'Kenney', '3D Assets', 'CC BY 4.0', 'CC0 1.0']) assert(credits.includes(name));
+  for (const name of ['DreamNoms', 'Kenney', '3D Assets', 'Pat Siefring', 'CC BY 3.0', 'CC BY 4.0', 'CC0 1.0']) assert(credits.includes(name));
   console.log('desktop actions passed');
   await desktop.close();
   }

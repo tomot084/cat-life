@@ -1,11 +1,9 @@
 // Safe floor area for the cats. Furniture occupies the edges of the room.
 export type FloorPoint = { x: number; z: number };
-// The middle deck was measured from the upward-facing triangles of cat-tree.glb
-// after its production scale and placement are applied.
-export const TOWER_PERCH = { x: -2.66, z: -2.01, y: 2.05, dropRadius: 1.22 } as const;
+// The landing is the measured upper hammock surface of Pat Siefring's cat tree.
+export const TOWER_PERCH = { x: -3.05, z: -1.86, y: 1.404 } as const;
 export const TOWER_APPROACH: FloorPoint = { x: -1.92, z: -1.24 };
-export const TOWER_STEP = { x: -2.52, z: -1.68, y: 1.12 } as const;
-export const WINDOW_PERCH = { x: .12, z: -2.93, y: 1.17 } as const;
+export const WINDOW_PERCH = { x: .12, z: -2.88, y: 1.17 } as const;
 export const WINDOW_APPROACH: FloorPoint = { x: .12, z: -1.45 };
 export const LIFE_SPOTS = {
   bed: { x: 1.94, z: -.55 },

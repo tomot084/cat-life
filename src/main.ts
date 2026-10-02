@@ -80,7 +80,7 @@ import './production.css';
   selectionMat.emissiveColor = Color3.FromHexString('#c0925b'); selectionMat.alpha = .7;
   const selection = MeshBuilder.CreateTorus('selected-cat-ring', { diameter: .92, thickness: .027, tessellation: 40 }, scene);
   selection.material = selectionMat; selection.isPickable = false;
-  const towerMarker = MeshBuilder.CreateTorus('tower-landing-ring', { diameter: 1.08, thickness: .042, tessellation: 40 }, scene);
+  const towerMarker = MeshBuilder.CreateTorus('tower-landing-ring', { diameter: .72, thickness: .03, tessellation: 40 }, scene);
   towerMarker.position.set(TOWER_PERCH.x, TOWER_PERCH.y + .035, TOWER_PERCH.z);
   towerMarker.material = selectionMat; towerMarker.isPickable = false; towerMarker.setEnabled(false);
   let mode = 'relax', paused = false, selected = 0, grabbed = -1;

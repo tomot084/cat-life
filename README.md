@@ -18,11 +18,11 @@ http://localhost:5173/ を開きます。
 | 操作 | PC | スマートフォン |
 |---|---|---|
 | 猫を選ぶ | 猫をクリック | 猫をタップ |
-| 猫を移動 | 猫を約0.4秒長押ししてドラッグ。タワーの中段にも置けます | 猫を長押ししてスワイプ。タワーの中段にも置けます |
+| 猫を移動 | 猫を約0.4秒長押ししてドラッグ。タワーの上段にも置けます | 猫を長押ししてスワイプ。タワーの上段にも置けます |
 | 視点を回す | 猫以外をドラッグ、または猫を短くドラッグ | 猫以外をスワイプ |
 | 拡大・縮小 | ホイール | 2本指ピンチ |
 
-猫を離すと床かタワー中段の足場に置けます。床を歩くときは家具ともう一匹を避けます。「ほかの遊び」の「タワーにのぼる」から選択中の猫を呼び寄せることもできます。選択中の猫にはちゅーる・なでるが使えます。呼ぶ、ボール、カメラの寄り、配置と視点のリセット、UI非表示も選べます。一時停止中は反応・エフェクトも止まります。
+猫を離すと床かタワー上段の足場に置けます。床を歩くときは家具ともう一匹を避けます。「ほかの遊び」の「タワーにのぼる」から選択中の猫を呼び寄せることもできます。選択中の猫にはちゅーる・なでるが使えます。呼ぶ、ボール、カメラの寄り、配置と視点のリセット、UI非表示も選べます。一時停止中は反応・エフェクトも止まります。
 
 ## GitHub Pages
 
@@ -54,14 +54,14 @@ baseはoriginまたはActionsのGITHUB_REPOSITORYから取得します。公開�
 
 | 素材 | 作者・元URL | ライセンス |
 |---|---|---|
-| Cat Tree | [3D Assets (@3dassets)](https://3dassets.dev/assets/companion-animals-and-pet-home-cat-tree-e126b0aa) | CC0 1.0 |
+| Cat Tree | [Pat Siefring / Poly Pizza](https://poly.pizza/m/daMM0nomcTL) | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) |
 | Cushion Bed | [3D Assets (@3dassets)](https://3dassets.dev/assets/companion-animals-and-pet-home-cushion-bed-27a23ea4) | CC0 1.0 |
 | bookcaseOpenLow / books / pillow / plantSmall1 | [Kenney / Furniture Kit](https://kenney.nl/assets/furniture-kit) | CC0 1.0 |
 
-[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) は改変・再配布・商用利用可。3D Assetsの2点は配布元でAI生成と表示されています。ファイルはそのまま取り込み、実行時にサイズ・配置・材質を調整しています。画面下の「素材とつくり手 · Credits」から出典を確認できます。
+[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) は改変・再配布・商用利用可。Cushion Bedは配布元でAI生成と表示されています。Cat Treeは元の座面メッシュを足場判定に使い、作者とライセンスを表示します。画面下の「素材とつくり手 · Credits」から出典を確認できます。
 
-追加6 GLBは合計198,156 bytes、3,734三角形、画像・外部bufferなし。許可リストとSHA-256は `config/production-room-assets.json`。部屋の木目・布・影・ハートはコードで生成します。実行時に外部CDNへアクセスしません。
+追加6 GLBは合計113,252 bytes、1,802三角形。Cat Treeだけに小さな埋め込み色テクスチャがあり、外部bufferなし。許可リストとSHA-256は `config/production-room-assets.json`。部屋の木目・布・影・ハートはコードで生成します。実行時に外部CDNへアクセスしません。
 
-`npm run build` は猫2点と小物6点をhash・形式・Creditsと照合し、未知のGLBやZIP、画像、source map、symlink、private情報を拒否します。`npm run test:production` はdistだけを配信して三モード・二匹のふれあい・キャンセル・連打・停止再開・視点・モバイル画面・通信を検証します。`npm run test:controls` はタップ、長押し移動、回転、ピンチ、追加アクションのPC/スマホ操作を検証します。
+`npm run build` は猫2点と小物6点をhash・形式・Creditsと照合し、未知のGLBやZIP、許可外の画像、source map、symlink、private情報を拒否します。`npm run test:production` はdistだけを配信して三モード・二匹のふれあい・キャンセル・連打・停止再開・視点・モバイル画面・通信を検証します。`npm run test:controls` はタップ、長押し移動、回転、ピンチ、追加アクションのPC/スマホ操作を検証します。
 
 写真・制作途中素材・秘密情報は本リポジトリと公開サイトに含めません。監査の元ZIPとスクリーンショットもdistへコピーしません。

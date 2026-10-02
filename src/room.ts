@@ -1,11 +1,11 @@
-import { Color3, DynamicTexture, ImportMeshAsync, Mesh, MeshBuilder, PBRMaterial, Scene, ShadowGenerator, StandardMaterial, TransformNode, Vector3 } from '@babylonjs/core';
+import { Color3, DynamicTexture, ImportMeshAsync, Mesh, MeshBuilder, PBRMaterial, Ray, Scene, ShadowGenerator, StandardMaterial, TransformNode, Vector3 } from '@babylonjs/core';
 import treeUrl from './assets/room/cat-tree.glb?url';
 import bedUrl from './assets/room/cat-bed.glb?url';
 import shelfUrl from './assets/room/bookcaseOpenLow.glb?url';
 import booksUrl from './assets/room/books.glb?url';
 import pillowUrl from './assets/room/pillow.glb?url';
 import plantUrl from './assets/room/plantSmall1.glb?url';
-import { TOWER_PERCH, TOWER_STEP, WINDOW_PERCH } from './placement';
+import { TOWER_PERCH, WINDOW_PERCH } from './placement';
 
 export function material(scene: Scene, name: string, hex: string): StandardMaterial {
   const mat = new StandardMaterial(name, scene);
@@ -94,12 +94,13 @@ export async function createRoom(scene: Scene, shadows: ShadowGenerator): Promis
   box('window', [2.8, 1.52, .035], [.1, 2.02, -3.25], sky, false);
   for (const x of [-.62, .82]) box('window-mullion', [.045, 1.56, .07], [x, 2.02, -3.2], trim);
   box('window-crossbar', [2.85, .05, .07], [.1, 2.0, -3.2], trim);
-  // The broad, supported shelf is a real landing surface for the window routine.
-  box('window-sill', [3.15, .11, 1.03], [WINDOW_PERCH.x, WINDOW_PERCH.y - .095, WINDOW_PERCH.z], wood);
-  box('window-sill-front', [3.2, .085, .065], [WINDOW_PERCH.x, .99, -2.39], trim);
-  for (const x of [-1.05, 1.25]) box('window-shelf-bracket', [.105, .75, .38], [x, .67, -3.0], trim);
+  // A shallow sill and one small padded cat perch sit within the window width.
+  box('window-sill', [3.05, .09, .29], [.1, 1.085, -3.24], wood);
+  box('window-perch-base', [1.55, .08, .78], [WINDOW_PERCH.x, 1.085, WINDOW_PERCH.z], wood);
+  const bracket = box('window-perch-bracket', [1.1, .1, .42], [WINDOW_PERCH.x, .9, -3.17], trim);
+  bracket.rotation.x = -.55;
   const cushion = material(scene, 'window cushion', '#b4bca8');
-  box('window-cushion', [1.5, .04, .68], [WINDOW_PERCH.x, WINDOW_PERCH.y - .02, WINDOW_PERCH.z], cushion);
+  box('window-cushion', [1.38, .05, .69], [WINDOW_PERCH.x, 1.145, WINDOW_PERCH.z], cushion);
   const curtain = material(scene, 'curtain linen', '#f6efdf');
   for (const side of [-1, 1]) for (let i = 0; i < 6; i++) {
     const fold = cylinder('curtain-fold', .15, 1.93, [.1 + side * (1.37 + i * .07), 1.95, -3.05], curtain);
@@ -133,14 +134,15 @@ export async function createRoom(scene: Scene, shadows: ShadowGenerator): Promis
     }
     return placement;
   }
-  await prop(treeUrl, 'cat-tree', 2.7, [-3.05, 0, -2.25], 0);
-  // The source middle deck is narrower than a seated cat. A matching shelf
-  // under it gives the full body a visible, continuous landing surface.
-  const perchWood = material(scene, 'tower perch sage', '#a6b69a');
-  box('tower-perch-extension', [1.35, .09, 1.12],
-    [TOWER_PERCH.x, TOWER_PERCH.y - .045, TOWER_PERCH.z], perchWood);
-  box('tower-step', [1.02, .085, .82], [TOWER_STEP.x, TOWER_STEP.y - .043, TOWER_STEP.z], perchWood);
-  cylinder('tower-step-post', .12, TOWER_STEP.y - .08, [TOWER_STEP.x + .28, (TOWER_STEP.y - .08) / 2, TOWER_STEP.z - .22], rope);
+  const tree = await prop(treeUrl, 'cat-tree', 2.7, [-3.05, 0, -2.25], 0);
+  const upperDeck = tree.getChildMeshes(false).find(mesh => mesh.name.includes('pPlane2'));
+  if (!upperDeck) throw new Error('Cat tree upper deck is missing');
+  upperDeck.isPickable = true;
+  upperDeck.metadata = { catLanding: 'tower' };
+  upperDeck.computeWorldMatrix(true);
+  const landing = scene.pickWithRay(new Ray(new Vector3(TOWER_PERCH.x, 3, TOWER_PERCH.z), new Vector3(0, -1, 0)), mesh => mesh === upperDeck);
+  if (!landing?.hit || !landing.pickedPoint || Math.abs(landing.pickedPoint.y - TOWER_PERCH.y) > .04)
+    throw new Error(`Cat tree landing does not match its visible surface: ${landing?.pickedPoint?.y}; ${upperDeck.name}; ${upperDeck.getBoundingInfo().boundingBox.minimumWorld.toString()} ${upperDeck.getBoundingInfo().boundingBox.maximumWorld.toString()}`);
   await prop(bedUrl, 'cat-bed', .43, [3.15, .015, -.45]);
   await prop(shelfUrl, 'bookcase', 1.1, [2.85, 0, -2.97]);
   await prop(booksUrl, 'books', .33, [2.6, 1.1, -2.93], -.1);

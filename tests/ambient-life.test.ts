@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 import { AnimationGroup, MeshBuilder, NullEngine, Scene, TransformNode } from '@babylonjs/core';
 import { createAmbientLife, type DailyActivity } from '../src/ambient-life';
 import type { Companion } from '../src/interactions';
-import { TOWER_PERCH, TOWER_STEP, WINDOW_PERCH } from '../src/placement';
+import { TOWER_PERCH, WINDOW_PERCH } from '../src/placement';
 
 test('both cats complete the full daily routine without getting stuck', () => {
   const engine = new NullEngine();
@@ -24,7 +24,7 @@ test('both cats complete the full daily routine without getting stuck', () => {
     (index, x, z) => { cats[index].baseX = x; cats[index].baseZ = z; },
     (index, activity, label) => {
       if (label !== 'おさんぽ中' && !label.includes('ジャンプ')) reached[index].add(activity);
-      if (label === 'タワーの上') assert(cats[index].supportY > 2);
+      if (label === 'タワーの上') assert.equal(cats[index].supportY, TOWER_PERCH.y);
     }, () => false);
   life.startRelax();
   for (let i = 0; i < 6000; i++) life.tick(.05);
@@ -101,8 +101,6 @@ test('tower ascent coils, leaps, settles, and descent returns to the floor', () 
   assert(Math.abs(cats[0].nodes[1].rotationQuaternion?.x ?? 0) > .01, 'Hind leg should coil');
   for (let i = 0; i < 10; i++) life.tick(.05);
   assert(cats[0].root.position.y > floorY + .3, 'Cat should leap upward');
-  for (let i = 0; i < 10; i++) life.tick(.05);
-  assert(cats[0].root.position.y >= TOWER_STEP.y - .15, 'First jump should land on the lower step');
   for (let i = 0; i < 50 && label !== 'タワーの上'; i++) life.tick(.05);
   assert.equal(label, 'タワーの上');
   assert.equal(cats[0].root.position.y, TOWER_PERCH.y);
