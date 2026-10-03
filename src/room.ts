@@ -147,6 +147,18 @@ export async function createRoom(scene: Scene, shadows: ShadowGenerator): Promis
   const landing = scene.pickWithRay(new Ray(new Vector3(TOWER_PERCH.x, 4, TOWER_PERCH.z), new Vector3(0, -1, 0)), mesh => treeMeshes.includes(mesh));
   if (!landing?.hit || !landing.pickedPoint || Math.abs(landing.pickedPoint.y - TOWER_PERCH.y) > .015)
     throw new Error(`Cat tree landing does not match its visible surface: ${landing?.pickedPoint?.y}`);
+  // Visible, supported approach steps keep the cats out of the cramped side shelf.
+  for (const [name, x, y, z] of [
+    ['tower-low-step', -.23, .48, -1.72],
+    ['tower-middle-step', -1.35, 1.04, -1.94],
+  ] as const) {
+    const board = box(name, [1.12, .075, 1.08], [x, y - .0375, z], trim);
+    board.isPickable = true; board.metadata = { catLanding: 'tower' };
+    for (const dx of [-.36, .36]) {
+      const post = cylinder(`${name}-support`, .12, y - .075, [x + dx, (y - .075) / 2, z], rope);
+      post.metadata = { towerSupport: true };
+    }
+  }
   await prop(perchUrl, 'round-cat-bed', 1.15, [3.85, .015, -1.65]);
   await prop(scratcherUrl, 'cat-scratcher', .32, [-3.15, .015, .1], Math.PI / 2);
   await prop(bedUrl, 'cat-bed', .43, [3.15, .015, -.45]);

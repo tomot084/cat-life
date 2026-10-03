@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { NullEngine, Scene, TransformNode, Quaternion, Vector3 } from '@babylonjs/core';
 import type { Companion } from '../src/interactions';
+import { createCatLimbIK } from '../src/cat-limb-ik';
 import { createSurfaceTraversal } from '../src/surface-traversal';
 import { traversalKind, type CatSurface } from '../src/tower-surfaces';
 
@@ -53,4 +54,26 @@ test('height selects contact steps in both directions and reserves flight for hi
  assert.equal(traversalKind(surface('low',.15,1),floor,1.25),'step-down');
  assert.equal(traversalKind(floor,surface('high',1.67,1),1.25),'jump-up');
  assert.equal(traversalKind(surface('high',1.67,1),floor,1.25),'jump-down');
+});
+
+
+test('limb solver preserves bend direction, link lengths and level soles when reaching',()=>{
+ const engine=new NullEngine(),scene=new Scene(engine),cat=rig(scene);
+ const ik=createCatLimbIK(cat),lengths=cat.nodes.map(n=>n.position.asArray());
+ for(const front of [true,false])for(const side of ['L','R']) {
+  const names=front?['front_thigh','front_shin','front_foot','front_toe']:['thigh','shin','foot','toe'];
+  const [upper,knee,paw,toe]=names.map(name=>cat.nodes.find(n=>n.name===`${name}.${side}`)!);
+  for(const node of [upper,knee,paw,toe])node.computeWorldMatrix(true);
+  const soleUp=Vector3.TransformNormal(Vector3.Up(),paw.getWorldMatrix().clone().invert());
+  const before=knee.getAbsolutePosition().subtract(upper.getAbsolutePosition());
+  const target=toe.getAbsolutePosition().add(new Vector3(.035,.07,.02));
+  const error=ik.solve(front,side,target,cat.root.rotation.y,cat.root.rotation.y);
+  assert(error<.002,`Reach error ${error}`);
+  paw.computeWorldMatrix(true);knee.computeWorldMatrix(true);
+  const up=Vector3.TransformNormal(soleUp,paw.getWorldMatrix()).normalize();
+  assert(Vector3.Dot(up,Vector3.Up())>.999,'The paw sole must stay level');
+  assert(Vector3.Dot(before,knee.getAbsolutePosition().subtract(upper.getAbsolutePosition()))>0,'The knee must retain its bend plane');
+ }
+ assert.deepEqual(cat.nodes.map(n=>n.position.asArray()),lengths);
+ scene.dispose();engine.dispose();
 });

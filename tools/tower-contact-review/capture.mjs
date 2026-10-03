@@ -9,15 +9,15 @@ await build({configFile:false,root:resolve('tools/tower-contact-review'),base:'.
 const server=createServer(async(req,res)=>{try{const path=resolve(dir+'/preview',new URL(req.url,'http://localhost').pathname.slice(1)||'index.html');assert(path.startsWith(resolve(dir+'/preview')+'/'));res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.glb':'model/gltf-binary'})[extname(path)]??'application/octet-stream');res.end(await readFile(path));}catch{res.statusCode=404;res.end();}});await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin=`http://127.0.0.1:${server.address().port}`;
 const browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});const errors=[],shots=[],audits=[];
 try {
-const page=await browser.newPage({viewport:{width:720,height:600}});page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});await page.route('**/*',r=>r.request().url().startsWith(origin+'/')?r.continue():r.abort());await page.goto(origin);await page.waitForFunction(()=>window.ready||window.failure,null,{timeout:90000});assert.equal(await page.evaluate(()=>window.failure),undefined);
+const page=await browser.newPage({viewport:{width:960,height:800}});page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});await page.route('**/*',r=>r.request().url().startsWith(origin+'/')?r.continue():r.abort());await page.goto(origin);await page.waitForFunction(()=>window.ready||window.failure,null,{timeout:90000});assert.equal(await page.evaluate(()=>window.failure),undefined);
 await writeFile(`${dir}/geometry.json`,JSON.stringify(await page.evaluate(()=>window.review.geometry()),null,2));
-for(const i of [0,1])for(const mode of ['up','down']) {
+for(const i of process.env.REVIEW_CATS?JSON.parse(process.env.REVIEW_CATS):[0,1])for(const mode of process.env.REVIEW_MODES?JSON.parse(process.env.REVIEW_MODES):['up','down']) {
  await page.evaluate(([i,m])=>window.review.start(i,m),[i,mode]);
- const times=process.env.REVIEW_TIMES?JSON.parse(process.env.REVIEW_TIMES):[0,.8,1.55,2.1,2.55,3.2,3.8,4.4,5.1,5.7,6.4,7,7.5,7.95,8.3,8.55,8.9,9.2,9.55,9.9];
+ const times=process.env.REVIEW_FPS?Array.from({length:Math.floor(Number(process.env.REVIEW_SECONDS??10)*Number(process.env.REVIEW_FPS))+1},(_,i)=>i/Number(process.env.REVIEW_FPS)):process.env.REVIEW_TIMES?JSON.parse(process.env.REVIEW_TIMES):[0,.8,1.55,2.1,2.55,3.2,3.8,4.4,5.1,5.7,6.4,7,7.5,7.95,8.3,8.55,8.9,9.2,9.55,9.9];
  for(const time of times) {
   const snapshot=await page.evaluate(([i,t])=>window.review.advance(i,t),[i,time]);
   assert(snapshot.verticesFinite);
-  if(cycle!=='baseline'&&cycle!=='geometry') {
+  if(cycle!=='baseline'&&cycle!=='geometry'&&!process.env.REVIEW_VISUAL_ONLY) {
    for(const contact of snapshot.contactSurfaces??[]) assert(contact.actual!==null&&Math.abs(contact.expected-contact.actual)<.035,`Missing real board: ${JSON.stringify(contact)}`);
    for(const foot of snapshot.traversal?.feet??[])if(foot.locked)assert(foot.error<.045,`Planted paw slipped: ${foot.error}`);
   }
@@ -25,5 +25,5 @@ for(const i of [0,1])for(const mode of ['up','down']) {
   await page.screenshot({path:`${dir}/${file}`,timeout:90000});shots.push({cat:i?'kokoro':'purin',mode,time,file,...snapshot});
  }
 }
-assert.deepEqual(errors,[]);await writeFile(`${dir}/report.json`,JSON.stringify({passed:true,errors,shots,audits},null,2));console.log(`${cycle}: ${shots.length} real-rig poses, ${audits.length} additional cases passed`);
+assert.deepEqual(errors,[]);await writeFile(`${dir}/report.json`,JSON.stringify({passed:!process.env.REVIEW_VISUAL_ONLY,visualOnly:!!process.env.REVIEW_VISUAL_ONLY,errors,shots,audits},null,2));console.log(`${cycle}: ${shots.length} real-rig poses ${process.env.REVIEW_VISUAL_ONLY?'captured for visual review (contact assertions disabled)':'passed contact and geometry assertions'}`);
 }finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));}

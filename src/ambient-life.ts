@@ -14,7 +14,7 @@ type Actor = {
   route: FloorPoint[]; waypoint: number; pose?: Map<string, JointPose>;
   actOrigin?: Vector3;
   jumpFrom?: Vector3; jumpTo?: Vector3; jumpTiming?: JumpTiming; jumpFeet?: FootTarget[]; landingFeet?: FootTarget[];
-  afterLanding?: () => void; blocked: number; traversal?: ReturnType<typeof createSurfaceTraversal>; surfacePath?: CatSurface[];
+  afterLanding?: () => void; blocked: number; traversal?: ReturnType<typeof createSurfaceTraversal>; surfacePath?: CatSurface[]; prepareTime?: number;
   toyPhase?: 'observe' | 'aim' | 'strike' | 'track' | 'chase' | 'recover';
   toyPattern?: number; strikeOrigin?: Vector3; toyTime?: number; strikes?: number; paw?: string; contact?: boolean; jumpYaw?: number; landingYaw?: number; jumpFacingFrom?: number; prepOrigin?: Vector3; poseWeight?: number; jumpSupport?: number;
 };
@@ -103,7 +103,7 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     pose.node.scaling.copyFrom(pose.scale); pose.node.scaling.y *= 1 + (eye - 1) * (actor.poseWeight ?? 1);
   }
   function interrupt(index: number) {
-    const actor = actors[index]; actor.traversal?.restore(); actor.traversal = undefined; actor.surfacePath = undefined; restorePose(actor); restoreAction(index); restoreBall(index); restoreMouse(index);
+    const actor = actors[index]; actor.traversal?.restore(); actor.traversal = undefined; actor.surfacePath = undefined; actor.prepareTime=undefined; restorePose(actor); restoreAction(index); restoreBall(index); restoreMouse(index);
     cats[index].root.rotation.x = 0; cats[index].root.rotation.z = 0;
     if (actor.stage === 'walk') play(cats[index], 'IdleNorm');
     actor.stage = 'manual'; actor.time = 0; actor.route = []; actor.waypoint = 0; actor.afterLanding = undefined;
@@ -183,9 +183,9 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     actor.activity='tower';actor.stage=up?'jump-up':'jump-down';actor.afterLanding=afterLanding;
     const surface=towerSurfaceAt(cat.supportY), n=TOWER_SURFACES.indexOf(surface);
     actor.surfacePath=up?TOWER_SURFACES.slice(n+1):TOWER_SURFACES.slice(0,n).reverse();
-    play(cat,'IdleNorm');group(cat).goToFrame(group(cat).from);group(cat).pause();
-    announce(index,'tower',up?'タワーをのぼる':'タワーからジャンプ');
-    startTowerLeg(index);
+    // Allow the native walk/sit-to-stand blend to finish before measuring limbs.
+    play(cat,'IdleNorm');actor.prepareTime=.32;
+    announce(index,'tower',up?'タワーをのぼる':'タワーをおりる');
   }
   function startTowerLeg(index: number) {
     const actor=actors[index],cat=cats[index],next=actor.surfacePath?.shift();
@@ -202,12 +202,15 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     }
     const source=towerSurfaceAt(cat.supportY);
     const previousFeet=footTargets(cat.nodes);
-    play(cat,'IdleNorm');group(cat).goToFrame(group(cat).from);group(cat).pause();
+    play(cat,'IdleNorm');
+    const idle=group(cat);idle.stop();idle.enableBlending=false;idle.start(true);idle.goToFrame(idle.from);idle.pause();
     cat.root.rotation.x=0;cat.root.rotation.z=0;
     actor.traversal=createSurfaceTraversal(cat,source,next,catProportions[cat.key as keyof typeof catProportions]?.displayBodyHeight??1.25,previousFeet);
   }
   function tickTower(index: number, dt: number) {
-    const actor=actors[index],traversal=actor.traversal;
+    const actor=actors[index];
+    if(actor.prepareTime!==undefined){actor.prepareTime-=dt;if(actor.prepareTime<=0){actor.prepareTime=undefined;startTowerLeg(index);}return;}
+    const traversal=actor.traversal;
     if(traversal?.update(dt)) startTowerLeg(index);
     const info=actor.traversal?.debug();
     if(info)scene.getEngine().getRenderingCanvas()?.setAttribute(`data-${cats[index].key}-traversal`,JSON.stringify(info));
@@ -338,7 +341,10 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
       const x = cat.root.position.x + (target.x - cat.root.position.x) * portion / distance;
       const z = cat.root.position.z + (target.z - cat.root.position.z) * portion / distance;
       const other = cats[1 - index].root.position;
-      if (Math.hypot(x - other.x, z - other.z) < .75) {
+      const separation=Math.hypot(x-other.x,z-other.z);
+      const previousSeparation=Math.hypot(cat.root.position.x-other.x,cat.root.position.z-other.z);
+      // A cat placed close to its companion must be able to walk away.
+      if (separation < .75 && separation <= previousSeparation + 1e-6) {
         actor.blocked += dt;
         if (actor.blocked > 1.5) {
           actor.route = planFloorRoute(cat.root.position, actor.route.at(-1)!, { x: other.x, z: other.z });
@@ -501,7 +507,7 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
         if (enabled && actor.time >= actor.duration) nextActivity(index);
       } else if (actor.stage === 'walk') tickWalk(index, dt);
       else if (actor.stage === 'act') tickAct(index, dt);
-      else if (actor.traversal) tickTower(index, dt);
+      else if (actor.traversal || actor.prepareTime!==undefined) tickTower(index, dt);
       else tickWindowJump(index, dt);
     });
   }

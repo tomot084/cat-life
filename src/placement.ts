@@ -4,7 +4,7 @@ export type FloorPoint = { x: number; z: number };
 export const TOWER_PERCH = { x: -3.05, z: -2.87, y: 2.6505 } as const;
 // Root is ahead of the paw centroid in this rig; offset toward the left edge.
 export const TOWER_STEP = { x: -2.8, z: -2.05, y: 1.829 } as const;
-export const TOWER_APPROACH: FloorPoint = { x: -3.83, z: -.91 };
+export const TOWER_APPROACH: FloorPoint = { x: -.22, z: -.72 };
 export const WINDOW_PERCH = { x: .12, z: -2.88, y: 1.17 } as const;
 export const WINDOW_APPROACH: FloorPoint = { x: .12, z: -1.45 };
 export const LIFE_SPOTS = {
@@ -16,6 +16,8 @@ export const LIFE_SPOTS = {
   wander: [{ x: -.8, z: -.7 }, { x: .7, z: -1.25 }, { x: .8, z: 1.55 }, { x: -1.3, z: .55 }],
 } as const;
 const furniture = [
+  { x: -.23, z: -1.72, radius: .90 },
+  { x: -1.35, z: -1.94, radius: .90 },
   { x: -3.05, z: -2.25, radius: 1.45 }, // widened cat tree
   { x: 3.15, z: -.45, radius: 1.05 },
   { x: 3.85, z: -1.65, radius: .65 }, // round cat bed

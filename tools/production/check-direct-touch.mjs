@@ -27,6 +27,18 @@ try {
  for (const mobile of (process.env.MOBILE_ONLY ? [true] : process.env.DESKTOP_ONLY ? [false] : [false, true])) {
   const label = mobile ? 'mobile' : 'desktop';
   const page = await browser.newPage(mobile ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1100, height: 850 } });
+  await page.addInitScript(()=>{
+    window.towerContactAudit={samples:0,maxError:0,states:{}};
+    const observer=new MutationObserver(records=>{
+      for(const record of records){
+        const value=record.target.getAttribute(record.attributeName);if(!value)continue;
+        const info=JSON.parse(value),audit=window.towerContactAudit;
+        audit.samples++;audit.states[`${record.attributeName}:${info.from}:${info.to}:${info.phase}`]=true;
+        for(const foot of info.feet)if(foot.locked)audit.maxError=Math.max(audit.maxError,foot.error);
+      }
+    });
+    observer.observe(document,{subtree:true,attributes:true,attributeFilter:['data-purin-traversal','data-kokoro-traversal']});
+  });
   page.on('crash', () => errors.push('Page crashed'));
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if(m.type()==='error') errors.push(m.text()); if(m.type()==='warning') warnings.push(m.text()); });
@@ -137,7 +149,10 @@ try {
   await page.waitForTimeout(1000); await click('一時停止');
   await page.screenshot({timeout:90000,path:`${out}/${label}-final.png`,fullPage:true});
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-  report.push({label,passed:true,quality,occlusionAdjustments}); await page.close(); console.log(label+' review completed');
+  const towerContacts=await page.evaluate(()=>window.towerContactAudit);
+  assert(towerContacts.samples>20,'The native animation handoff must be checked through actual rendered tower movement');
+  assert(towerContacts.maxError<.045,`Native animation handoff caused paw slip: ${towerContacts.maxError}`);
+  report.push({label,passed:true,quality,occlusionAdjustments,towerContacts}); await page.close(); console.log(label+' review completed');
  }
  await writeFile(`${out}/report.json`,JSON.stringify({base,report,errors,warnings,badResponses},null,2));
  assert.deepEqual(errors,[]); assert.deepEqual(warnings,[]); assert.deepEqual(badResponses,[]);

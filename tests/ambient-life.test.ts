@@ -111,7 +111,7 @@ test('tower visits actual shelves, pauses on the bed, and descends through the s
     assert(cats[0].root.position.asArray().every(Number.isFinite));
   }
   for(const surface of TOWER_SURFACES)assert(visited.has(surface.y),`Missing ${surface.id}`);
-  assert(kinds.has('climb'));assert(kinds.has('jump-up'));
+  assert(kinds.has('climb'));assert(kinds.has('jump-up'),'Upper boards require a short jump');
   assert.equal(label, 'タワーの上');
   assert.equal(cats[0].root.position.y, TOWER_PERCH.y);
   assert.equal(cats[0].root.rotation.x, 0);
@@ -119,15 +119,15 @@ test('tower visits actual shelves, pauses on the bed, and descends through the s
   life.tick(3);
   assert.equal(cats[0].root.position.y, TOWER_PERCH.y, 'Pause should freeze the cat on the perch');
   life.pause(false);
-  for (let i = 0; i < 200 && label !== 'タワーからジャンプ'; i++) life.tick(.05);
-  assert.equal(label, 'タワーからジャンプ');
+  for (let i = 0; i < 200 && label !== 'タワーをおりる'; i++) life.tick(.05);
+  assert.equal(label, 'タワーをおりる');
   const descending=new Set<number>();const downKinds=new Set<string>();
   for(let i=0;i<300&&cats[0].supportY>0;i++) {
     life.tick(.05);descending.add(cats[0].supportY);
     const debug=life.traversalDebug(0);if(debug)downKinds.add(debug.kind);
   }
   for(const surface of TOWER_SURFACES)assert(descending.has(surface.y),`Descent skipped ${surface.id}`);
-  assert(downKinds.has('step-down'));assert(downKinds.has('jump-down'));
+  assert(downKinds.has('step-down'));assert(downKinds.has('jump-down'),'Upper boards require a front-first landing');
   assert.equal(cats[0].supportY, 0);
   assert.equal(cats[0].root.position.y, 0);
   scene.dispose(); engine.dispose();
@@ -158,4 +158,19 @@ test('window command lands on the sill and returns to the floor', () => {
   for (let i = 0; i < 100 && !landed; i++) life.tick(.05);
   assert(landed); assert.equal(cats[0].supportY, 0);
   scene.dispose(); engine.dispose();
+});
+
+test('a cat standing close to its companion can walk away toward the tower',()=>{
+ const engine=new NullEngine(),scene=new Scene(engine);
+ const cats=[0,-.5].map((x,index)=>{
+  const root=new TransformNode(index?'kokoro':'purin',scene);root.position.set(x,0,.5);
+  const groups=['IdleNorm','IdleSit','WalkCycle'].map(name=>({name,from:0,start(){return this;},stop(){return this;},goToFrame(){return this;},pause(){return this;}})) as unknown as AnimationGroup[];
+  return {key:root.name,name:root.name,root,meshes:[],nodes:[],groups,homeX:x,homeZ:.5,baseX:x,baseY:0,baseZ:.5,supportY:0,walkX:x,walkZ:.5,action:'IdleNorm',angle:0} satisfies Companion;
+ });
+ const life=createAmbientLife(scene,cats,(cat,action)=>{cat.action=action;},()=>{},()=>{},()=>false);
+ assert(life.commandTower(0));
+ for(let i=0;i<400&&!life.isTransitioning(0);i++)life.tick(.05);
+ assert(life.isTransitioning(0),'Starting inside the avoidance radius must not cause permanent walking deadlock');
+ assert(Math.hypot(cats[0].root.position.x-cats[1].root.position.x,cats[0].root.position.z-cats[1].root.position.z)>.75);
+ scene.dispose();engine.dispose();
 });
