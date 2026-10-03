@@ -8,6 +8,7 @@ import { safeFloorPoint } from './placement';
 import { TOWER_PERCH, WINDOW_PERCH } from './placement';
 import { createAmbientLife } from './ambient-life';
 import { createScruffCarry } from './scruff-carry';
+import { catProportions } from './cat-proportions';
 import purinUrl from './assets/models/purin.glb?url';
 import kokoroUrl from './assets/models/kokoro.glb?url';
 import './production.css';
@@ -46,14 +47,16 @@ import './production.css';
     for (const g of result.animationGroups) g.stop();
     const idle = result.animationGroups.find(g => g.name === 'IdleNorm')!;
     idle.start(true); idle.goToFrame(idle.from); idle.pause(); scene.render();
-    let lo = new Vector3(Infinity, Infinity, Infinity), hi = lo.negate();
+    let lo = new Vector3(Infinity, Infinity, Infinity);
     for (const mesh of result.meshes.filter(m => m.getTotalVertices())) {
       mesh.computeWorldMatrix(true); mesh.refreshBoundingInfo({ applySkeleton: true });
       const bounds = mesh.getBoundingInfo().boundingBox;
-      lo = Vector3.Minimize(lo, bounds.minimumWorld); hi = Vector3.Maximize(hi, bounds.maximumWorld);
+      lo = Vector3.Minimize(lo, bounds.minimumWorld);
       shadows.addShadowCaster(mesh); mesh.receiveShadows = true;
     }
-    const scale = (index ? 1.65 * 1.08 : 1.65) / (hi.y - lo.y);
+    // Tail length must not change body size. Proportions are baked into mesh and rig.
+    const proportions = catProportions[key as keyof typeof catProportions];
+    const scale = proportions.displayBodyHeight / proportions.bodyHeight;
     const x = index ? 1.15 : -1.15, z = .5;
     root.scaling.setAll(scale); root.position.set(x, .025 - lo.y * scale, z);
     cats.push({ key, name, root, meshes: result.meshes, nodes: result.transformNodes, groups: result.animationGroups,
@@ -157,7 +160,7 @@ import './production.css';
       cat.walkX = cat.baseX - .42 * Math.sin(cat.angle);
       cat.walkZ = cat.baseZ - .42 * Math.cos(cat.angle);
       cat.root.position.set(cat.baseX, cat.baseY, cat.baseZ);
-      cat.supportY = 0; cat.root.rotation.x = 0;
+      cat.supportY = 0; cat.root.rotation.x = 0; cat.root.rotation.z = 0;
       const next = mode;
       cat.root.rotation.y = next === 'walk' ? Math.atan2(Math.cos(cat.angle), -Math.sin(cat.angle)) : i ? -.18 : .18;
       play(cat, next === 'walk' ? 'WalkCycle' : next === 'sit' ? 'IdleSit' : i ? 'IdleSit' : 'IdleNorm');

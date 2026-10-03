@@ -4,7 +4,7 @@ export type FloorPoint = { x: number; z: number };
 export const TOWER_PERCH = { x: -3.05, z: -2.87, y: 2.6505 } as const;
 // Root is ahead of the paw centroid in this rig; offset toward the left edge.
 export const TOWER_STEP = { x: -2.8, z: -2.05, y: 1.829 } as const;
-export const TOWER_APPROACH: FloorPoint = { x: -1.78, z: -1.13 };
+export const TOWER_APPROACH: FloorPoint = { x: -3.83, z: -.91 };
 export const WINDOW_PERCH = { x: .12, z: -2.88, y: 1.17 } as const;
 export const WINDOW_APPROACH: FloorPoint = { x: .12, z: -1.45 };
 export const LIFE_SPOTS = {

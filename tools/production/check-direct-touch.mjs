@@ -24,7 +24,7 @@ const errors = [], warnings = [], badResponses = [], report = [];
 const out = `artifacts/direct-touch/cycle-${process.env.REVIEW_CYCLE ?? 'verification'}`;
 await mkdir(out, { recursive: true });
 try {
- for (const mobile of (process.env.MOBILE_ONLY ? [true] : [false, true])) {
+ for (const mobile of (process.env.MOBILE_ONLY ? [true] : process.env.DESKTOP_ONLY ? [false] : [false, true])) {
   const label = mobile ? 'mobile' : 'desktop';
   const page = await browser.newPage(mobile ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1100, height: 850 } });
   page.on('crash', () => errors.push('Page crashed'));
@@ -75,7 +75,7 @@ try {
   const touch=(type,points)=>session.send('Input.dispatchTouchEvent',{type,touchPoints:points.map(([x,y,id])=>({x,y,id}))});
   if(mobile) { await touch('touchStart',[[p.x,p.y,1]]); await touch('touchMove',[[p.x+12,p.y+8,1]]); }
   else { await page.mouse.move(p.x,p.y); await page.mouse.down(); await page.mouse.move(p.x+12,p.y+8); }
-  await page.waitForTimeout(500); assert.equal(await data('gesture'),'cat-carry'); assert.equal(await data('camera'),camera,'Drift on cat must never orbit');
+  await page.waitForFunction(() => document.querySelector('canvas').dataset.gesture === 'cat-carry', null, {timeout:3000}); assert.equal(await data('gesture'),'cat-carry'); assert.equal(await data('camera'),camera,'Drift on cat must never orbit');
   if(mobile) await touch('touchMove',[[p.x+65,p.y+45,1]]); else await page.mouse.move(p.x+65,p.y+45,{steps:8});
   if(!mobile) await page.mouse.wheel(0,-180);
   await page.screenshot({timeout:90000,path:`${out}/${label}-carry.png`}); assert.equal(await data('camera'),camera,'Carry locks camera');
@@ -96,7 +96,7 @@ try {
   const cancelPoint = await coord('purin');
   if (mobile) await touch('touchStart', [[cancelPoint.x,cancelPoint.y,9]]);
   else { await page.mouse.move(cancelPoint.x,cancelPoint.y); await page.mouse.down(); }
-  await page.waitForTimeout(500); assert.equal(await data('gesture'),'cat-carry');
+  await page.waitForFunction(() => document.querySelector('canvas').dataset.gesture === 'cat-carry', null, {timeout:3000}); assert.equal(await data('gesture'),'cat-carry');
   if (mobile) await touch('touchCancel',[]);
   else { await canvas.evaluate(c => c.releasePointerCapture(1)); await page.mouse.up(); }
   await page.waitForTimeout(900); assert.equal(await data('gesture'),'idle');

@@ -3,6 +3,7 @@ import { strict as assert } from 'node:assert';
 import { AnimationGroup, MeshBuilder, NullEngine, Scene, TransformNode } from '@babylonjs/core';
 import { createAmbientLife, type DailyActivity } from '../src/ambient-life';
 import type { Companion } from '../src/interactions';
+import { TOWER_SURFACES } from '../src/tower-surfaces';
 import { TOWER_PERCH, WINDOW_PERCH } from '../src/placement';
 
 test('both cats complete the full daily routine without getting stuck', () => {
@@ -80,7 +81,7 @@ test('the ball rolls only after a forepaw reaches to bat it', () => {
   scene.dispose(); engine.dispose();
 });
 
-test('tower ascent coils, leaps, settles, and descent returns to the floor', () => {
+test('tower visits actual shelves, pauses on the bed, and descends through the shelves', () => {
   const engine = new NullEngine();
   const scene = new Scene(engine);
   const cats = [-1.15, 1.15].map((x, index) => {
@@ -103,13 +104,14 @@ test('tower ascent coils, leaps, settles, and descent returns to the floor', () 
   assert(life.commandTower(0));
   for (let i = 0; i < 1000 && label !== 'タワーをのぼる'; i++) life.tick(.05);
   assert.equal(label, 'タワーをのぼる');
-  const floorY = cats[0].root.position.y;
-  life.tick(.25);
-  assert(cats[0].root.position.y < floorY, 'Takeoff should begin with a crouch');
-  assert(Math.abs(cats[0].nodes[1].rotationQuaternion?.x ?? 0) > .01, 'Hind leg should coil');
-  for (let i = 0; i < 10; i++) life.tick(.05);
-  assert(cats[0].root.position.y > floorY + .3, 'Cat should leap upward');
-  for (let i = 0; i < 100 && label !== 'タワーの上'; i++) life.tick(.05);
+  const visited=new Set<number>(); const kinds=new Set<string>();
+  for(let i=0;i<300&&label!=='タワーの上';i++) {
+    life.tick(.05);visited.add(cats[0].supportY);
+    const debug=life.traversalDebug(0);if(debug)kinds.add(debug.kind);
+    assert(cats[0].root.position.asArray().every(Number.isFinite));
+  }
+  for(const surface of TOWER_SURFACES)assert(visited.has(surface.y),`Missing ${surface.id}`);
+  assert(kinds.has('climb'));assert(kinds.has('jump-up'));
   assert.equal(label, 'タワーの上');
   assert.equal(cats[0].root.position.y, TOWER_PERCH.y);
   assert.equal(cats[0].root.rotation.x, 0);
@@ -119,9 +121,13 @@ test('tower ascent coils, leaps, settles, and descent returns to the floor', () 
   life.pause(false);
   for (let i = 0; i < 200 && label !== 'タワーからジャンプ'; i++) life.tick(.05);
   assert.equal(label, 'タワーからジャンプ');
-  for (let i = 0; i < 18; i++) life.tick(.05);
-  assert(cats[0].root.position.y < TOWER_PERCH.y - .2 && cats[0].root.position.y > 0, 'Descent should pass through the air');
-  for (let i = 0; i < 100; i++) life.tick(.05);
+  const descending=new Set<number>();const downKinds=new Set<string>();
+  for(let i=0;i<300&&cats[0].supportY>0;i++) {
+    life.tick(.05);descending.add(cats[0].supportY);
+    const debug=life.traversalDebug(0);if(debug)downKinds.add(debug.kind);
+  }
+  for(const surface of TOWER_SURFACES)assert(descending.has(surface.y),`Descent skipped ${surface.id}`);
+  assert(downKinds.has('step-down'));assert(downKinds.has('jump-down'));
   assert.equal(cats[0].supportY, 0);
   assert.equal(cats[0].root.position.y, 0);
   scene.dispose(); engine.dispose();

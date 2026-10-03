@@ -1,10 +1,14 @@
 {
   "purin": {
     "file": "src/assets/models/purin.glb",
-    "sha256": "d008f505c400d21e5d0aa416a12e330bd8219a17dd202eeb39a5b87977ae14ed"
+    "sha256": "0a531f5da0000e898371d7353380e1c1fe5bd02ce710c4e79bbbca9fcc0ed0bd",
+    "bodyHeight": 7.525072395801544,
+    "displayBodyHeight": 1.25
   },
   "kokoro": {
     "file": "src/assets/models/kokoro.glb",
-    "sha256": "75410326be2212ca6cccdb31ff6af1d48dc6886bb3b335bcc1b6e79fa9b80a66"
+    "sha256": "d2d9f265e533125bc3ff78615dc22d09a64f2a543c39949b2c5a8e9cef2cda4d",
+    "bodyHeight": 8.409239038825035,
+    "displayBodyHeight": 1.52
   }
 }

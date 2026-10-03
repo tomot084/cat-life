@@ -1,6 +1,10 @@
 import { Color3, MeshBuilder, Quaternion, Scene, StandardMaterial, TransformNode, Vector3 } from '@babylonjs/core';
+import { footTargets, plantFeet, reachFrontFeet, jumpTiming, jumpPose, type FootTarget, type JumpTiming } from './cat-motion';
+import { createSurfaceTraversal } from './surface-traversal';
+import { TOWER_SURFACES, towerSurfaceAt, type CatSurface } from './tower-surfaces';
+import { catProportions } from './cat-proportions';
 import type { Companion } from './interactions';
-import { LIFE_SPOTS, floorSegmentClear, planFloorRoute, safeFloorPoint, TOWER_APPROACH, TOWER_PERCH, TOWER_STEP, WINDOW_APPROACH, WINDOW_PERCH, type FloorPoint } from './placement';
+import { LIFE_SPOTS, floorSegmentClear, planFloorRoute, safeFloorPoint, TOWER_APPROACH, TOWER_PERCH, WINDOW_APPROACH, WINDOW_PERCH, type FloorPoint } from './placement';
 
 export type DailyActivity = 'rest' | 'wander' | 'sit' | 'doze' | 'eat' | 'drink' | 'ball' | 'mouse' | 'tower' | 'window';
 type Stage = 'manual' | 'wait' | 'walk' | 'act' | 'jump-up' | 'jump-down';
@@ -9,10 +13,10 @@ type Actor = {
   stage: Stage; activity: DailyActivity; time: number; duration: number; sequence: number;
   route: FloorPoint[]; waypoint: number; pose?: Map<string, JointPose>;
   actOrigin?: Vector3;
-  jumpFrom?: Vector3; jumpTo?: Vector3; jumpPrep?: number;
-  afterLanding?: () => void; blocked: number;
+  jumpFrom?: Vector3; jumpTo?: Vector3; jumpTiming?: JumpTiming; jumpFeet?: FootTarget[]; landingFeet?: FootTarget[];
+  afterLanding?: () => void; blocked: number; traversal?: ReturnType<typeof createSurfaceTraversal>; surfacePath?: CatSurface[];
   toyPhase?: 'observe' | 'aim' | 'strike' | 'track' | 'chase' | 'recover';
-  toyPattern?: number; strikeOrigin?: Vector3; toyTime?: number; strikes?: number; paw?: string; contact?: boolean; jumpYaw?: number; landingYaw?: number; jumpFacingFrom?: number; prepOrigin?: Vector3; poseWeight?: number; jumpSupport?: number; jumpLeg?: number;
+  toyPattern?: number; strikeOrigin?: Vector3; toyTime?: number; strikes?: number; paw?: string; contact?: boolean; jumpYaw?: number; landingYaw?: number; jumpFacingFrom?: number; prepOrigin?: Vector3; poseWeight?: number; jumpSupport?: number;
 };
 const routines: DailyActivity[][] = [
   ['wander', 'eat', 'tower', 'doze', 'ball', 'drink', 'window', 'mouse', 'sit'],
@@ -84,7 +88,7 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
   function capturePose(index: number) {
     const pose = new Map<string, JointPose>();
     for (const name of ['spine.008', 'spine.009', 'spine.010', 'Head', 'Eye.L', 'Eye.R',
-      'Ear.L', 'Ear.R', 'TailBase', 'Tail2', 'Tail3', 'shoulder.L', 'shoulder.R',
+      'Ear.L', 'Ear.R', 'TailBase', 'Tail2', 'Tail3', 'TailTip', 'shoulder.L', 'shoulder.R',
       'front_thigh.L', 'front_thigh.R', 'front_shin.L', 'front_shin.R',
       'front_foot.L', 'front_foot.R', 'pelvis.L', 'pelvis.R',
       'thigh.L', 'thigh.R', 'shin.L', 'shin.R', 'foot.L', 'foot.R']) {
@@ -99,7 +103,8 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     pose.node.scaling.copyFrom(pose.scale); pose.node.scaling.y *= 1 + (eye - 1) * (actor.poseWeight ?? 1);
   }
   function interrupt(index: number) {
-    const actor = actors[index]; restorePose(actor); restoreAction(index); restoreBall(index); restoreMouse(index);
+    const actor = actors[index]; actor.traversal?.restore(); actor.traversal = undefined; actor.surfacePath = undefined; restorePose(actor); restoreAction(index); restoreBall(index); restoreMouse(index);
+    cats[index].root.rotation.x = 0; cats[index].root.rotation.z = 0;
     if (actor.stage === 'walk') play(cats[index], 'IdleNorm');
     actor.stage = 'manual'; actor.time = 0; actor.route = []; actor.waypoint = 0; actor.afterLanding = undefined;
     if (cats[index].supportY < .1 && cats[index].root.position.y < cats[index].baseY + .15) {
@@ -115,7 +120,7 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
   function startAct(index: number) {
     const actor = actors[index], cat = cats[index], activity = actor.activity;
     actor.time = 0;
-    if (activity === 'tower' || activity === 'window') { beginJump(index, true); return; }
+    if (activity === 'tower' || activity === 'window') { beginElevationTransfer(index, true); return; }
     actor.stage = 'act';
     actor.duration = ({ wander: 2.6, sit: 4.2, doze: 7.5, eat: 4.7, drink: 4.2, ball: 11.5, mouse: 10.8, rest: 2 } as Partial<Record<DailyActivity, number>>)[activity]!;
     play(cat, activity === 'sit' || activity === 'doze' ? 'IdleSit' : 'IdleNorm');
@@ -173,103 +178,137 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     restorePose(actors[index]); restoreAction(index); restoreBall(index); restoreMouse(index); wait(index, 1.4);
     if (!enabled) actors[index].stage = 'manual';
   }
-  function beginJump(index: number, up: boolean, afterLanding?: () => void) {
+  function beginTowerTransfer(index: number, up: boolean, afterLanding?: () => void) {
+    const actor=actors[index],cat=cats[index];restorePose(actor);
+    actor.activity='tower';actor.stage=up?'jump-up':'jump-down';actor.afterLanding=afterLanding;
+    const surface=towerSurfaceAt(cat.supportY), n=TOWER_SURFACES.indexOf(surface);
+    actor.surfacePath=up?TOWER_SURFACES.slice(n+1):TOWER_SURFACES.slice(0,n).reverse();
+    play(cat,'IdleNorm');group(cat).goToFrame(group(cat).from);group(cat).pause();
+    announce(index,'tower',up?'タワーをのぼる':'タワーからジャンプ');
+    startTowerLeg(index);
+  }
+  function startTowerLeg(index: number) {
+    const actor=actors[index],cat=cats[index],next=actor.surfacePath?.shift();
+    if(!next) {
+      actor.traversal=undefined;
+      if(actor.stage==='jump-up') {
+        towerOwner=index;actor.stage='act';actor.time=0;actor.duration=8;play(cat,'IdleSit');announce(index,'tower');
+      } else {
+        towerOwner=-1;cat.supportY=0;onMoved(index,cat.root.position.x,cat.root.position.z);
+        const callback=actor.afterLanding;actor.afterLanding=undefined;
+        if(callback){actor.stage='manual';callback();}else finish(index);
+      }
+      return;
+    }
+    const source=towerSurfaceAt(cat.supportY);
+    const previousFeet=footTargets(cat.nodes);
+    play(cat,'IdleNorm');group(cat).goToFrame(group(cat).from);group(cat).pause();
+    cat.root.rotation.x=0;cat.root.rotation.z=0;
+    actor.traversal=createSurfaceTraversal(cat,source,next,catProportions[cat.key as keyof typeof catProportions]?.displayBodyHeight??1.25,previousFeet);
+  }
+  function tickTower(index: number, dt: number) {
+    const actor=actors[index],traversal=actor.traversal;
+    if(traversal?.update(dt)) startTowerLeg(index);
+    const info=actor.traversal?.debug();
+    if(info)scene.getEngine().getRenderingCanvas()?.setAttribute(`data-${cats[index].key}-traversal`,JSON.stringify(info));
+  }
+  function beginElevationTransfer(index: number, up: boolean, afterLanding?: () => void) {
     const actor = actors[index], cat = cats[index]; restorePose(actor); actor.poseWeight = 1;
     const destination = up ? actor.activity : elevatedActivity(cat);
+    if(destination==='tower') {beginTowerTransfer(index,up,afterLanding);return;}
     actor.activity = destination;
-    const perch = destination === 'window' ? WINDOW_PERCH : TOWER_PERCH;
-    const approach = destination === 'window' ? WINDOW_APPROACH : TOWER_APPROACH;
+    const perch = WINDOW_PERCH;
+    const approach = WINDOW_APPROACH;
     const other = cats[1 - index].root.position;
     const floor = safeFloorPoint(approach.x, approach.z, { x: other.x, z: other.z });
-    actor.stage = up ? 'jump-up' : 'jump-down'; actor.time = 0; actor.duration = up ? 1.65 : 1.45;
-    actor.jumpLeg = destination === 'tower' ? (up ? (cat.supportY < 1 ? 0 : 1) : (cat.supportY > 2 ? 1 : 0)) : 0;
-    const landingSurface = destination === 'tower' && (up ? actor.jumpLeg === 0 : actor.jumpLeg === 1) ? TOWER_STEP : perch;
-    actor.jumpSupport = up ? landingSurface.y : destination === 'tower' && actor.jumpLeg === 1 ? TOWER_STEP.y : 0;
-    actor.jumpPrep = up ? .42 : .38;
+    actor.stage = up ? 'jump-up' : 'jump-down'; actor.time = 0;
+    const landingSurface = perch;
+    actor.jumpSupport = up ? landingSurface.y : 0;
     actor.jumpFrom = cat.root.position.clone(); actor.jumpTo = up ?
       new Vector3(landingSurface.x, cat.baseY + landingSurface.y, landingSurface.z) :
-      actor.jumpSupport > 0 ? new Vector3(TOWER_STEP.x, cat.baseY + TOWER_STEP.y, TOWER_STEP.z) : new Vector3(floor.x, cat.baseY, floor.z);
+      new Vector3(floor.x, cat.baseY, floor.z);
     actor.afterLanding = afterLanding;
 
     play(cat, 'IdleNorm'); group(cat).goToFrame(group(cat).from); group(cat).pause(); capturePose(index);
     actor.jumpFacingFrom = cat.root.rotation.y;
     actor.jumpYaw = angle(actor.jumpFrom, actor.jumpTo);
-    actor.landingYaw = (up || actor.jumpSupport! > 0) && destination === 'tower'
-      ? (actor.jumpTo.x < actor.jumpFrom.x ? -Math.PI / 2 : Math.PI / 2) : actor.jumpYaw;
+    actor.landingYaw = actor.jumpYaw;
     actor.prepOrigin = actor.jumpFrom.clone();
+    const savedPosition = cat.root.position.clone(), savedYaw = cat.root.rotation.y;
+    cat.root.rotation.y = actor.jumpYaw; actor.jumpFeet = footTargets(cat.nodes);
+    cat.root.position.copyFrom(actor.jumpTo); cat.root.rotation.y = actor.landingYaw;
+    actor.landingFeet = footTargets(cat.nodes);
+    cat.root.position.copyFrom(savedPosition); cat.root.rotation.y = savedYaw;
     if (!up && cat.supportY > .1) {
       const direction = actor.jumpTo.subtract(actor.jumpFrom); direction.y = 0; direction.normalize();
-      actor.jumpFrom.addInPlace(direction.scale(.04));
+      actor.jumpFrom.addInPlace(direction.scale(.09));
     }
-    const height = Math.abs(actor.jumpTo.y - actor.jumpFrom.y);
-    actor.duration = actor.jumpPrep! + .55 + Math.sqrt(height) * .22 + .36 + (actor.sequence % 3) * .025;
+    actor.jumpTiming = jumpTiming(actor.jumpTo.y - actor.jumpFrom.y, cat.key === 'kokoro');
+    actor.duration = actor.jumpTiming.duration;
     announce(index, destination, up ? (destination === 'window' ? '窓辺へジャンプ' : 'タワーをのぼる') :
       (destination === 'window' ? '窓辺からジャンプ' : 'タワーからジャンプ'));
   }
-  function tickJump(index: number, dt: number) {
-    const actor = actors[index], cat = cats[index]; actor.time += dt;
+  function tickWindowJump(index: number, dt: number) {
+    const actor = actors[index], cat = cats[index];
+    actor.time += dt;
     restorePose(actor); capturePose(index);
     const up = actor.stage === 'jump-up';
-    // Separate the planted crouch, airborne travel, and landing recovery.
-    const prep = actor.jumpPrep ?? 0, settle = .36, flightEnd = actor.duration - settle;
-    const p = unit((actor.time - prep) / (flightEnd - prep));
-    const landing = unit((actor.time - flightEnd) / settle);
-    const power = Math.min(1, .4 + Math.abs(actor.jumpTo!.y - actor.jumpFrom!.y) / 3);
-    const coil = (actor.time < prep ? ease((actor.time / prep - .35) / .65) : 1 - ease(p / .18)) * power;
-    const stretch = ease(p / .14) * (1 - ease((p - .42) / .2));
-    const tuck = ease((p - .2) / .25) * (1 - ease((p - .72) / .18));
-    const reach = ease((p - .48) / .29) * (1 - ease((p - .97) / .03));
-    const absorb = actor.time >= flightEnd ? Math.sin(Math.PI * landing) : 0;
+    const timing = actor.jumpTiming!;
+    const pose = jumpPose(actor.time, timing, up);
+    const { prep, p, land, air, compress, launch, tuck, reach, frontAbsorb, hindAbsorb, look } = pose;
     const start = actor.jumpFrom!, end = actor.jumpTo!;
-    if (actor.time < prep) {
-      const diff = Math.atan2(Math.sin(actor.jumpYaw! - actor.jumpFacingFrom!), Math.cos(actor.jumpYaw! - actor.jumpFacingFrom!));
-      cat.root.rotation.y = actor.jumpFacingFrom! + diff * ease(actor.time / (prep * .55));
+    const size = cat.key === 'kokoro' ? 1 : .87;
+    const facing = Math.atan2(Math.sin(actor.jumpYaw! - actor.jumpFacingFrom!), Math.cos(actor.jumpYaw! - actor.jumpFacingFrom!));
+    const turn = Math.atan2(Math.sin(actor.landingYaw! - actor.jumpYaw!), Math.cos(actor.landingYaw! - actor.jumpYaw!));
+    if (actor.time < timing.prep) {
+      cat.root.rotation.y = actor.jumpFacingFrom! + facing * ease(prep / .34);
+      cat.root.position.copyFrom(Vector3.Lerp(actor.prepOrigin ?? start, start, ease(prep / .65)));
+      cat.root.position.y -= (up ? .16 : .085) * compress * size;
+    } else if (air) {
+      cat.root.rotation.y = actor.jumpYaw! + turn * ease((p - .28) / .62);
+      cat.root.position.x = mix(start.x, end.x, p);
+      cat.root.position.z = mix(start.z, end.z, p);
+      const flightTime = pose.p * timing.flight;
+      cat.root.position.y = start.y + timing.velocity * flightTime - .5 * timing.gravity * flightTime * flightTime;
     } else {
-      const turn = Math.atan2(Math.sin(actor.landingYaw! - actor.jumpYaw!), Math.cos(actor.landingYaw! - actor.jumpYaw!));
-      cat.root.rotation.y = actor.jumpYaw! + turn * ease((p - .35) / .5);
+      cat.root.rotation.y = actor.landingYaw!;
+      cat.root.position.copyFrom(end); cat.supportY = actor.jumpSupport ?? 0;
+      cat.root.position.y -= size * (.082 * frontAbsorb + .047 * hindAbsorb);
     }
-    if (actor.time < prep) {
-      cat.root.position.copyFrom(Vector3.Lerp(actor.prepOrigin ?? start, start, ease(actor.time / (prep * .6))));
-      cat.root.position.y -= (up ? .085 : .045) * coil;
-    } else if (actor.time < flightEnd) {
-      const travel = ease(p), launchY = start.y - (up ? .085 : .045) * power * (prep > 0 ? 1 : 0);
-      cat.root.position.x = mix(start.x, end.x, travel);
-      cat.root.position.z = mix(start.z, end.z, travel);
-      // The asymmetric arcs lift toward the perch and drop away from its edge.
-      cat.root.position.y = up
-        ? mix(launchY, end.y, ease(p / .68)) + .40 * Math.sin(Math.PI * p)
-        : launchY + .24 * Math.sin(Math.PI * p) + (end.y - launchY) * ease((p - .35) / .65);
-    } else {
-      cat.root.position.copyFrom(end);
-      cat.supportY = actor.jumpSupport ?? 0;
-      cat.root.position.y -= .018 * absorb;
-    }
-    cat.root.rotation.x = up ? -.13 * stretch + .07 * reach + .045 * absorb
-      : .12 * stretch - .055 * tuck + .045 * absorb;
-    const look = up ? -.16 * coil - .1 * stretch + .08 * reach : .2 * coil + .1 * stretch + .06 * reach;
-    bend(actor, 'spine.009', 0, .08 * coil - .05 * stretch + .05 * absorb);
-    bend(actor, 'spine.010', 0, .05 * coil - .08 * stretch + .06 * absorb);
-    bend(actor, 'Head', 0, look + .07 * absorb);
-    const hindAbsorb = actor.time >= flightEnd ? Math.sin(Math.PI * unit((landing - .18) / .82)) : 0;
+    // Head leads a descending jump; hindquarters drive an ascending jump.
+    cat.root.rotation.x = up ? -.27 * launch - .10 * tuck + .15 * reach + .075 * frontAbsorb
+      : .15 * look + .17 * launch - .035 * tuck + .19 * reach + .08 * frontAbsorb;
+    if (!air && actor.time >= timing.prep) cat.root.rotation.x *= 1 - ease(land / .72);
+    const asymmetry = (cat.key === 'kokoro' ? -1 : 1) * .022;
+    cat.root.rotation.z = air ? asymmetry * Math.sin(Math.PI * p) : 0;
+    bend(actor, 'spine.008', 0, .11 * compress - .055 * launch + .07 * tuck + .04 * hindAbsorb);
+    bend(actor, 'spine.009', 0, .17 * compress - .15 * launch + .12 * tuck + .095 * frontAbsorb);
+    bend(actor, 'spine.010', 0, up ? -.15 * look + .10 * reach : .25 * look - .10 * reach);
+    bend(actor, 'Head', 0, up ? -.20 * look + .12 * reach : .30 * look - .12 * reach);
     for (const side of ['L', 'R']) {
-      bend(actor, `shoulder.${side}`, 0, -.06 * stretch + .04 * absorb);
-      bend(actor, `front_thigh.${side}`, 0, .18 * coil + .46 * stretch + .2 * tuck + .36 * reach - .12 * absorb);
-      bend(actor, `front_shin.${side}`, 0, -.24 * coil - .16 * stretch - .3 * tuck + .04 * reach + .22 * absorb);
-      bend(actor, `front_foot.${side}`, 0, .1 * coil + .14 * stretch + .1 * reach - .09 * absorb);
-      bend(actor, `thigh.${side}`, 0, -.25 * coil + .39 * stretch - .25 * tuck - .09 * reach - .1 * absorb);
-      bend(actor, `shin.${side}`, 0, .36 * coil - .25 * stretch + .38 * tuck + .16 * reach + .27 * hindAbsorb);
-      bend(actor, `foot.${side}`, 0, -.12 * coil + .12 * stretch - .09 * absorb);
+      const lead = side === (cat.key === 'kokoro' ? 'R' : 'L') ? 1 : .91;
+      bend(actor, `Ear.${side}`, 0, -.06 * launch, (side === 'L' ? 1 : -1) * (.045 * compress + .10 * tuck));
+      bend(actor, `shoulder.${side}`, 0, -.13 * launch + .08 * reach + .09 * frontAbsorb);
+      bend(actor, `front_thigh.${side}`, 0, .22 * compress + .67 * launch + .47 * tuck + .66 * reach * lead - .25 * frontAbsorb);
+      bend(actor, `front_shin.${side}`, 0, -.38 * compress - .24 * launch - .74 * tuck + .30 * reach + .48 * frontAbsorb);
+      bend(actor, `front_foot.${side}`, 0, .14 * compress + .24 * tuck + .12 * reach - .20 * frontAbsorb);
+      bend(actor, `pelvis.${side}`, 0, .10 * compress - .06 * launch + .07 * tuck);
+      bend(actor, `thigh.${side}`, 0, -.56 * compress + .62 * launch - .60 * tuck - .19 * reach - .19 * hindAbsorb);
+      bend(actor, `shin.${side}`, 0, .73 * compress - .46 * launch + .74 * tuck + .16 * reach + .53 * hindAbsorb);
+      bend(actor, `foot.${side}`, 0, -.23 * compress + .22 * launch - .15 * tuck - .15 * hindAbsorb);
     }
-    bend(actor, 'TailBase', 0, -.12 * stretch + .13 * reach, .12 * Math.sin(actor.time * 6) * (stretch + tuck));
-    bend(actor, 'Tail2', 0, -.08 * stretch + .11 * reach, .1 * Math.sin(actor.time * 6 - .6) * (stretch + tuck));
-    bend(actor, 'Tail3', 0, 0, .07 * Math.sin(actor.time * 6 - 1.1) * (stretch + tuck));
+    // The tail trails the spine with a phase delay rather than staying rigidly upright.
+    const balance = air ? Math.sin(Math.PI * p) : 0;
+    const flick = Math.sin(p * Math.PI * 2.2) * balance;
+    bend(actor, 'TailBase', 0, -.54 * launch - .42 * balance + .15 * reach, .14 * flick);
+    bend(actor, 'Tail2', 0, -.19 * launch - .25 * balance + .10 * reach, .11 * Math.sin(p * 6 - .45) * balance);
+    bend(actor, 'Tail3', 0, .09 * balance, .10 * Math.sin(p * 6 - .95) * balance);
+    bend(actor, 'TailTip', 0, .18 * balance, .10 * Math.sin(p * 6 - 1.45) * balance);
+    if (air) reachFrontFeet(cat.nodes, cat.root.rotation.y, reach);
+    if (actor.time < timing.prep && actor.jumpFeet) plantFeet(cat.nodes, actor.jumpFeet, .85 * ease((prep - .3) / .25), ease((prep - .3) / .25));
+    if (!air && actor.time >= timing.prep && actor.landingFeet) plantFeet(cat.nodes, actor.landingFeet, 1, ease(land / .22));
     if (actor.time < actor.duration) return;
-    restorePose(actor); cat.root.position.copyFrom(end); cat.root.rotation.x = 0;
-    if (actor.activity === 'tower' && (up ? actor.jumpLeg === 0 : actor.jumpLeg === 1)) {
-      cat.supportY = TOWER_STEP.y;
-      const callback = actor.afterLanding;
-      beginJump(index, up, callback); return;
-    }
+    restorePose(actor); cat.root.position.copyFrom(end); cat.root.rotation.x = 0; cat.root.rotation.z = 0;
     if (up) {
       cat.supportY = actor.activity === 'window' ? WINDOW_PERCH.y : TOWER_PERCH.y;
       if (actor.activity === 'window') windowOwner = index; else towerOwner = index;
@@ -439,7 +478,7 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
       }
     }
     if (actor.time < actor.duration) return;
-    if (actor.activity === 'tower' || actor.activity === 'window') beginJump(index, false);
+    if (actor.activity === 'tower' || actor.activity === 'window') beginElevationTransfer(index, false);
     else finish(index);
   }
   function tick(dt: number) {
@@ -462,7 +501,8 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
         if (enabled && actor.time >= actor.duration) nextActivity(index);
       } else if (actor.stage === 'walk') tickWalk(index, dt);
       else if (actor.stage === 'act') tickAct(index, dt);
-      else tickJump(index, dt);
+      else if (actor.traversal) tickTower(index, dt);
+      else tickWindowJump(index, dt);
     });
   }
   function startRelax() {
@@ -475,7 +515,7 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
         actors[index].duration = 7; actors[index].time = 0;
         play(cat, 'IdleSit'); announce(index, actors[index].activity);
       } else if (cat.root.position.y > cat.baseY + .15) {
-        beginJump(index, false, () => wait(index, 1.5));
+        beginElevationTransfer(index, false, () => wait(index, 1.5));
       } else wait(index, index ? 2.8 : 1.2);
     });
   }
@@ -484,7 +524,7 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
     cats.forEach((cat, index) => {
       const elevated = cat.supportY > .1 || cat.root.position.y > cat.baseY + .15;
       interrupt(index);
-      if (elevated) beginJump(index, false, () => onGround(index));
+      if (elevated) beginElevationTransfer(index, false, () => onGround(index));
       else { cat.supportY = 0; cat.root.position.y = cat.baseY; onMoved(index, cat.root.position.x, cat.root.position.z); onGround(index); }
     });
   }
@@ -520,13 +560,13 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
   }
   function returnToFloor(index: number, done: () => void) {
     const cat = cats[index]; interrupt(index);
-    if (cat.supportY > .1 || cat.root.position.y > cat.baseY + .15) beginJump(index, false, done);
+    if (cat.supportY > .1 || cat.root.position.y > cat.baseY + .15) beginElevationTransfer(index, false, done);
     else done();
   }
   function resetImmediate() {
     enabled = false; paused = false;
     cats.forEach((cat, index) => {
-      interrupt(index); cat.supportY = 0; cat.root.position.y = cat.baseY; cat.root.rotation.x = 0;
+      interrupt(index); cat.supportY = 0; cat.root.position.y = cat.baseY; cat.root.rotation.x = 0; cat.root.rotation.z = 0;
     });
     towerOwner = -1; windowOwner = -1; ballOwner = -1; mouseOwner = -1;
     toyVelocity.ball.setAll(0); toyVelocity.mouse.setAll(0);
@@ -543,6 +583,7 @@ export function createAmbientLife(scene: Scene, cats: Companion[],
   return { tick, startRelax, stopForMode, interrupt, placed, commandTower, commandWindow, commandMouse, commandBall, returnToFloor,
     resetImmediate, pause, canPerch: (index: number) => towerOwner < 0 || towerOwner === index,
     isTransitioning: (index: number) => actors[index].stage === 'jump-up' || actors[index].stage === 'jump-down',
+    traversalDebug: (index: number) => actors[index].traversal?.debug(),
     isBusy: (index: number) => actors[index].stage !== 'manual',
     isEnabled: () => enabled };
 }
